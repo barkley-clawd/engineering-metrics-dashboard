@@ -187,6 +187,9 @@ Run the same commands the CI workflow uses:
 # Install dependencies from the lockfile
 npm ci
 
+# Generate Nuxt build and tsconfig artifacts
+npm exec nuxi prepare
+
 # Run the test suite
 npm test
 
