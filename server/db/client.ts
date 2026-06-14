@@ -178,6 +178,7 @@ export function getLatestState(): LatestState {
     lastSuccessfulRefreshAt: lastRefresh,
     refreshInProgress,
     isStale,
+    dashboardWindow: null,
   }
 }
 

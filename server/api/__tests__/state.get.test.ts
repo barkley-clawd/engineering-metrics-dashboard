@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   mockSetHeader: vi.fn(),
   mockInitDb: vi.fn().mockResolvedValue(undefined),
   mockGetLatestState: vi.fn(),
+  mockGetDailyMetricsRange: vi.fn(),
 }))
 
 vi.mock('h3', () => ({
@@ -14,12 +15,15 @@ vi.mock('h3', () => ({
 vi.mock('../../db/client', () => ({
   initDb: mocks.mockInitDb,
   getLatestState: mocks.mockGetLatestState,
+  getDailyMetricsRange: mocks.mockGetDailyMetricsRange,
 }))
 
 import handler from '../state.get'
 
 describe('GET /api/state', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-14T12:00:00Z'))
     vi.clearAllMocks()
     mocks.mockGetLatestState.mockReturnValue({
       snapshot: null,
@@ -27,7 +31,13 @@ describe('GET /api/state', () => {
       lastSuccessfulRefreshAt: null,
       refreshInProgress: false,
       isStale: true,
+      dashboardWindow: null,
     })
+    mocks.mockGetDailyMetricsRange.mockReturnValue([])
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('sets Cache-Control: no-cache header', async () => {
@@ -41,19 +51,139 @@ describe('GET /api/state', () => {
     expect(mocks.mockInitDb).toHaveBeenCalledOnce()
   })
 
-  it('returns the latest state from the database', async () => {
+  it('returns the latest state with a normalized 28-day dashboard window', async () => {
     const state = {
       snapshot: { id: 'snap-1', capturedAt: new Date().toISOString() },
-      lastRefreshAt: '2025-01-01T00:00:00Z',
-      lastSuccessfulRefreshAt: '2025-01-01T00:00:00Z',
+      lastRefreshAt: '2026-06-14T12:00:00.000Z',
+      lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
       refreshInProgress: false,
       isStale: false,
+      dashboardWindow: null,
     }
+    const rows = [
+      {
+        day: '2026-06-14',
+        capturedAt: '2026-06-14T12:00:00.000Z',
+        source: 'orchestrated',
+        version: 1,
+        reflectsCompleteData: true,
+        issuesOpened: 3,
+        issuesClosed: 4,
+        prsCreated: 5,
+        prsMerged: 6,
+        totalCommits: 7,
+        avgCycleTimeDays: 2.5,
+        medianCycleTimeDays: 2,
+        p95CycleTimeDays: 4,
+        cycleTimeSampleSize: 8,
+        ciTotalRuns: 10,
+        ciPassCount: 8,
+        ciFailCount: 2,
+        ciPassRate: 0.8,
+        ciAvgDurationMs: 1200,
+        totalSessions: 11,
+        sessionErrorCount: 1,
+        staleIssues: 2,
+        stalePrs: 1,
+        warnings: [],
+        createdAt: '2026-06-14T12:00:00.000Z',
+      },
+      {
+        day: '2026-06-12',
+        capturedAt: '2026-06-12T12:00:00.000Z',
+        source: 'orchestrated',
+        version: 1,
+        reflectsCompleteData: false,
+        issuesOpened: 1,
+        issuesClosed: 2,
+        prsCreated: 3,
+        prsMerged: 4,
+        totalCommits: 5,
+        avgCycleTimeDays: null,
+        medianCycleTimeDays: null,
+        p95CycleTimeDays: null,
+        cycleTimeSampleSize: 0,
+        ciTotalRuns: 0,
+        ciPassCount: 0,
+        ciFailCount: 0,
+        ciPassRate: null,
+        ciAvgDurationMs: null,
+        totalSessions: 6,
+        sessionErrorCount: 2,
+        staleIssues: 4,
+        stalePrs: 3,
+        warnings: ['Partial data: local git unavailable'],
+        createdAt: '2026-06-12T12:00:00.000Z',
+      },
+    ]
     mocks.mockGetLatestState.mockReturnValue(state)
+    mocks.mockGetDailyMetricsRange.mockReturnValue(rows)
 
     const result = await handler({} as any)
+
+    expect(mocks.mockGetDailyMetricsRange).toHaveBeenCalledWith('2026-05-18', '2026-06-14')
     expect(mocks.mockGetLatestState).toHaveBeenCalledOnce()
-    expect(result).toEqual(state)
+    expect(result).toMatchObject({
+      ...state,
+      dashboardWindow: {
+        startDay: '2026-05-18',
+        endDay: '2026-06-14',
+        missingDays: expect.arrayContaining(['2026-06-13']),
+        latestDay: expect.objectContaining({ day: '2026-06-14' }),
+        cards: {
+          throughput: {
+            issuesOpened: 4,
+            issuesClosed: 6,
+            prsCreated: 8,
+            prsMerged: 10,
+            totalCommits: 12,
+          },
+          cycleTime: {
+            averageDays: 2.5,
+            medianDays: 2,
+            p95Days: 4,
+            sampleSize: 8,
+            sourceDay: '2026-06-14',
+          },
+          ci: {
+            totalRuns: 10,
+            passCount: 8,
+            failCount: 2,
+            passRate: 0.8,
+            averageDurationMs: 1200,
+            sourceDays: 1,
+          },
+          staleWork: {
+            staleIssues: 2,
+            stalePrs: 1,
+            capturedAt: '2026-06-14T12:00:00.000Z',
+            reflectsCompleteData: true,
+          },
+          sessionUsage: {
+            totalSessions: 17,
+            sessionErrorCount: 3,
+          },
+        },
+        coverage: {
+          totalDays: 28,
+          daysWithData: 2,
+          missingDays: 26,
+          hasGaps: true,
+          hasSourceWarnings: true,
+          isComplete: false,
+        },
+      },
+    })
+
+    expect(result.dashboardWindow.days).toHaveLength(28)
+    expect(result.dashboardWindow.days[0]).toMatchObject({ day: '2026-05-18', isGap: true, metrics: null })
+    expect(result.dashboardWindow.days.at(-1)).toMatchObject({ day: '2026-06-14', isGap: false })
+    expect(result.dashboardWindow.warnings).toEqual(
+      expect.arrayContaining([
+        'Partial data: local git unavailable',
+        'Missing 26 of 28 days in the rolling window',
+      ]),
+    )
   })
 
   it('propagates refreshInProgress from the database', async () => {
@@ -63,6 +193,7 @@ describe('GET /api/state', () => {
       lastSuccessfulRefreshAt: null,
       refreshInProgress: true,
       isStale: true,
+      dashboardWindow: null,
     })
 
     const result = await handler({} as any)

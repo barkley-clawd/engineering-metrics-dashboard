@@ -24,6 +24,15 @@ export type {
   MetricSnapshot,
   SnapshotRow,
   LatestState,
+  DashboardWindow,
+  DashboardWindowCards,
+  DashboardWindowCoverage,
+  DashboardWindowDay,
+  DashboardWindowThroughputSummary,
+  DashboardWindowCycleTimeSummary,
+  DashboardWindowCISummary,
+  DashboardWindowStaleWorkSummary,
+  DashboardWindowSessionSummary,
 } from './snapshot'
 
 export type {
