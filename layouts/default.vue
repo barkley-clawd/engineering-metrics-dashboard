@@ -1,19 +1,13 @@
 <template>
   <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <h1 class="sidebar-title">Clawd Metrics</h1>
-      </div>
-      <nav class="sidebar-nav">
-        <NuxtLink to="/" class="nav-link" exact-active-class="active">
-          Dashboard
-        </NuxtLink>
-        <NuxtLink to="/metrics" class="nav-link" exact-active-class="active">
-          Metrics
-        </NuxtLink>
-      </nav>
-    </aside>
     <main class="main">
+      <header class="shell-header">
+        <div>
+          <p class="eyebrow">Engineering Metrics Dashboard</p>
+          <h1 class="title">Clawd Metrics</h1>
+        </div>
+        <p class="subtitle">Single-dashboard shell for operator visibility.</p>
+      </header>
       <slot />
     </main>
   </div>
@@ -33,60 +27,59 @@ body {
 }
 
 .layout {
-  display: flex;
+  display: block;
   min-height: 100vh;
 }
 
-.sidebar {
-  width: 240px;
-  background: #1e293b;
-  border-right: 1px solid #334155;
-  display: flex;
-  flex-direction: column;
+.main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 2rem;
 }
 
-.sidebar-header {
-  padding: 1.25rem;
+.shell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
   border-bottom: 1px solid #334155;
 }
 
-.sidebar-title {
-  font-size: 1rem;
-  font-weight: 600;
+.eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
   color: #f1f5f9;
-  letter-spacing: 0.025em;
 }
 
-.sidebar-nav {
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.nav-link {
-  display: block;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.375rem;
-  color: #94a3b8;
-  text-decoration: none;
+.subtitle {
   font-size: 0.875rem;
-  transition: background 0.15s, color 0.15s;
+  color: #94a3b8;
+  max-width: 28rem;
+  text-align: right;
 }
 
-.nav-link:hover {
-  background: #334155;
-  color: #e2e8f0;
-}
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+  }
 
-.nav-link.active {
-  background: #1d4ed8;
-  color: #fff;
-}
+  .shell-header {
+    align-items: start;
+    flex-direction: column;
+  }
 
-.main {
-  flex: 1;
-  padding: 1.5rem;
-  overflow-y: auto;
+  .subtitle {
+    text-align: left;
+  }
 }
 </style>

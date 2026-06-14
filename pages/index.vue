@@ -1,25 +1,29 @@
 <template>
   <div class="dashboard">
     <div class="page-header">
-      <h2 class="page-title">Dashboard</h2>
-      <p class="page-subtitle">Engineering health at a glance</p>
+      <h2 class="page-title">Overview</h2>
+      <p class="page-subtitle">Placeholder sections for the first dashboard shell.</p>
     </div>
-    <div class="cards">
-      <div class="card">
-        <h3 class="card-title">Health Summary</h3>
-        <p class="card-body">No data yet. Connect a data source to get started.</p>
+
+    <div class="sections">
+      <div class="section section-large">
+        <h3 class="section-title">Summary</h3>
+        <p class="section-body">High-level status, throughput, cycle time, and blocked work will live here.</p>
       </div>
-      <div class="card">
-        <h3 class="card-title">Throughput</h3>
-        <p class="card-body">No data yet.</p>
+
+      <div class="section">
+        <h3 class="section-title">Trends</h3>
+        <p class="section-body">Placeholder for charts showing whether the system is speeding up or slowing down.</p>
       </div>
-      <div class="card">
-        <h3 class="card-title">Cycle Time</h3>
-        <p class="card-body">No data yet.</p>
+
+      <div class="section">
+        <h3 class="section-title">Work Queues</h3>
+        <p class="section-body">Open issues, PRs waiting on review, and stalled work will surface here.</p>
       </div>
-      <div class="card">
-        <h3 class="card-title">CI / Check Runs</h3>
-        <p class="card-body">No data yet.</p>
+
+      <div class="section">
+        <h3 class="section-title">CI Health</h3>
+        <p class="section-body">Build and test outcomes will be wired in later, not faked now.</p>
       </div>
     </div>
   </div>
@@ -27,7 +31,7 @@
 
 <style scoped>
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .page-title {
@@ -42,20 +46,26 @@
   color: #64748b;
 }
 
-.cards {
+.sections {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1rem;
 }
 
-.card {
+.section {
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 0.5rem;
   padding: 1.25rem;
+  min-height: 160px;
+  grid-column: span 6;
 }
 
-.card-title {
+.section-large {
+  grid-column: span 12;
+}
+
+.section-title {
   font-size: 0.875rem;
   font-weight: 600;
   color: #94a3b8;
@@ -64,8 +74,16 @@
   margin-bottom: 0.75rem;
 }
 
-.card-body {
+.section-body {
   font-size: 0.875rem;
   color: #64748b;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .section,
+  .section-large {
+    grid-column: span 12;
+  }
 }
 </style>
