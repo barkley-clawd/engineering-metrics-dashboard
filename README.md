@@ -247,6 +247,18 @@ npm run typecheck
 npm run build
 ```
 
+
+### `/api/state` 28-day contract
+
+`GET /api/state` keeps the existing snapshot and refresh metadata, and now adds `dashboardWindow` for the rolling 28-day dashboard view.
+
+- `dashboardWindow.startDay` and `dashboardWindow.endDay` are UTC `YYYY-MM-DD` keys.
+- `dashboardWindow.days` is normalized for chart consumption in ascending day order.
+- Missing days stay explicit with `isGap: true` and `metrics: null`.
+- `dashboardWindow.cards` contains the 28-day card-ready summaries for throughput, cycle time, CI, stale work, and session usage.
+- `dashboardWindow.coverage` exposes gap and warning status so the UI can stay honest about partial data.
+- `dashboardWindow.warnings` merges source warnings with a concise missing-day warning when gaps exist.
+
 ### 28-day regression coverage expectations
 
 The 28-day dashboard work should keep these regressions covered as the data model, API, and UI evolve:
