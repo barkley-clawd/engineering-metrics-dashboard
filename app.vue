@@ -1,5 +1,5 @@
 <template>
-  <div>
-    <p>Engineering Metrics Dashboard</p>
-  </div>
+  <NuxtLayout>
+    <NuxtPage />
+  </NuxtLayout>
 </template>
