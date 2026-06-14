@@ -93,6 +93,7 @@
             :cycle-time="snapshot.aggregates.cycleTime"
             :ci="snapshot.aggregates.ci"
             :stale-work="snapshot.aggregates.staleWork"
+            :session-usage="snapshot.aggregates.sessionUsage"
           />
         </div>
 

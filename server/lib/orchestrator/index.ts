@@ -62,6 +62,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
       let sessions: SessionMetric[] = []
       let localGit: LocalGitRepoMetric[] = []
       let aggregates: DashboardAggregates | null = null
+      let sessionUsageFromCollector: import('../../../types/aggregates').SessionUsageAggregate | null = null
 
       // 1. GitHub collector
       if (config.github) {
@@ -107,6 +108,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
           const sessionCollector = createSessionCollector(config.sessions)
           const sessionResult = await sessionCollector.collect()
           sessions = sessionResult.sessions
+          sessionUsageFromCollector = sessionResult.sessionUsage
           if (sessionResult.sessionUsage && aggregates) {
             aggregates = {
               ...aggregates,
@@ -145,9 +147,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
             staleThresholdDays: 14,
             oldestItemDays: null,
           },
-          sessionUsage: sessions.length > 0
-            ? null
-            : null,
+          sessionUsage: sessionUsageFromCollector,
           computedAt: capturedAt,
         }
       }

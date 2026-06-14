@@ -147,6 +147,104 @@ describe('createOrchestrator', () => {
     expect(snapshotArg.repositories).toHaveLength(2)
   })
 
+  it('preserves sessionUsage when no GitHub collector configured', async () => {
+    const sessionCollector = { collect: vi.fn() }
+
+    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+
+    sessionCollector.collect.mockResolvedValue({
+      sessions: [
+        { id: 's1', toolName: 'opencode', action: 'edit', timestamp: 'now', durationMs: 100, metadata: {}, success: true },
+        { id: 's2', toolName: 'opencode', action: 'search', timestamp: 'now', durationMs: 200, metadata: {}, success: true },
+      ],
+      sessionUsage: {
+        periodStart: '2025-05-01T00:00:00Z',
+        periodEnd: '2025-06-01T12:00:00Z',
+        totalSessions: 2,
+        uniqueTools: ['opencode'],
+        topActions: [{ action: 'edit', count: 1 }, { action: 'search', count: 1 }],
+        errorCount: 0,
+      },
+      gap: null,
+      errors: [],
+    })
+
+    const orchestrator = createOrchestrator({
+      sessions: {},
+    })
+
+    const result = await orchestrator.collect()
+
+    expect(result.sources).toEqual(['sessions'])
+    expect(result.errors).toHaveLength(0)
+    expect(result.partialData).toBe(false)
+
+    const snapshotArg = vi.mocked(db.insertSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    expect(snapshotArg.sessions).toHaveLength(2)
+    expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(2)
+
+    const aggEntries = vi.mocked(db.insertAggregate).mock.calls
+    const sessionUsageEntry = aggEntries.find(e => e[1] === 'sessionUsage')
+    expect(sessionUsageEntry).toBeDefined()
+  })
+
+  it('preserves sessionUsage when only localGit and sessions configured', async () => {
+    const gitCollector = { collect: vi.fn() }
+    const sessionCollector = { collect: vi.fn() }
+
+    vi.mocked(mockGitCreate).mockReturnValue(gitCollector as never)
+    vi.mocked(mockSessionCreate).mockReturnValue(sessionCollector as never)
+
+    gitCollector.collect.mockResolvedValue({
+      repos: [{
+        path: '/home/repo1',
+        repoName: 'repo1',
+        defaultBranch: 'main',
+        isGitRepo: true,
+        recentCommits: 10,
+        authors: ['alice@example.com'],
+        latestCommitAt: '2025-06-01T12:00:00Z',
+        error: null,
+      }],
+      errors: [],
+    })
+
+    sessionCollector.collect.mockResolvedValue({
+      sessions: [
+        { id: 's1', toolName: 'opencode', action: 'edit', timestamp: 'now', durationMs: 100, metadata: {}, success: true },
+      ],
+      sessionUsage: {
+        periodStart: '2025-05-01T00:00:00Z',
+        periodEnd: '2025-06-01T12:00:00Z',
+        totalSessions: 1,
+        uniqueTools: ['opencode'],
+        topActions: [{ action: 'edit', count: 1 }],
+        errorCount: 0,
+      },
+      gap: null,
+      errors: [],
+    })
+
+    const orchestrator = createOrchestrator({
+      localGit: { repos: [{ path: '/home/repo1' }] },
+      sessions: {},
+    })
+
+    const result = await orchestrator.collect()
+
+    expect(result.sources).toContain('localGit')
+    expect(result.sources).toContain('sessions')
+    expect(result.errors).toHaveLength(0)
+
+    const snapshotArg = vi.mocked(db.insertSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot
+    expect(snapshotArg.sessions).toHaveLength(1)
+    expect(snapshotArg.localGit).toHaveLength(1)
+    expect(snapshotArg.aggregates.sessionUsage).not.toBeNull()
+    expect(snapshotArg.aggregates.sessionUsage!.totalSessions).toBe(1)
+    expect(snapshotArg.aggregates.throughput.totalCommits).toBe(10)
+  })
+
   it('handles partial collector failure gracefully', async () => {
     const ghCollector = { collect: vi.fn(), getApiClient: vi.fn() }
     const gitCollector = { collect: vi.fn() }

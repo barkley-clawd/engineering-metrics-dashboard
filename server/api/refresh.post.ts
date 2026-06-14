@@ -38,6 +38,32 @@ async function runRefresh(): Promise<void> {
       }
     }
 
+    if (process.env.GIT_REPOS) {
+      const paths = process.env.GIT_REPOS.split(',').map(p => p.trim()).filter(Boolean)
+      if (paths.length > 0) {
+        config.localGit = {
+          repos: paths.map(p => ({ path: p })),
+        }
+      }
+    }
+
+    const sessionsConfig: {
+      periodDays?: number
+      opencodeCommand?: string
+    } = {}
+    if (process.env.SESSIONS_PERIOD_DAYS) {
+      const days = parseInt(process.env.SESSIONS_PERIOD_DAYS, 10)
+      if (!isNaN(days) && days > 0) {
+        sessionsConfig.periodDays = days
+      }
+    }
+    if (process.env.OPENCODE_COMMAND) {
+      sessionsConfig.opencodeCommand = process.env.OPENCODE_COMMAND
+    }
+    if (Object.keys(sessionsConfig).length > 0) {
+      config.sessions = sessionsConfig
+    }
+
     const orchestrator = createOrchestrator(config)
     await orchestrator.collect()
   } finally {

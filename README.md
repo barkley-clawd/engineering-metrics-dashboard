@@ -144,6 +144,10 @@ export GITHUB_REPO=your-repo
 
 # Optional: Local git repos (comma-separated paths)
 export GIT_REPOS=/path/to/repo1,/path/to/repo2
+
+# Optional: Session / OpenCode CLI metrics
+export OPENCODE_COMMAND=opencode
+export SESSIONS_PERIOD_DAYS=30
 ```
 
 Create a `.env` file in the project root to persist these:
@@ -152,6 +156,9 @@ Create a `.env` file in the project root to persist these:
 GITHUB_TOKEN=ghp_your_token_here
 GITHUB_OWNER=your-org-or-user
 GITHUB_REPO=your-repo
+GIT_REPOS=/path/to/repo1,/path/to/repo2
+OPENCODE_COMMAND=opencode
+SESSIONS_PERIOD_DAYS=30
 ```
 
 ### Manual data refresh
