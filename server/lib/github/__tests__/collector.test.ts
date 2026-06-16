@@ -101,7 +101,7 @@ describe('createCollector', () => {
     expect(result.snapshotId).toBeTruthy()
     expect(result.issuesCount).toBe(2)
     expect(result.prsCount).toBe(1)
-    expect(result.checkRunsCount).toBe(1)
+    expect(result.workflowRunsCount).toBe(1)
     if (result.errors.length > 0) {
       console.error('Unexpected errors:', result.errors)
     }

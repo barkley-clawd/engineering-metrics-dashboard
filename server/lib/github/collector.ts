@@ -3,7 +3,7 @@ import { deriveAll } from './aggregates'
 import { TtlCache } from '../../cache/index'
 import { initDb, insertSnapshot, insertAggregate, getLatestSnapshot } from '../../db/client'
 import type { GitHubCollectorConfig, CollectorResult, CollectorProgress } from './types'
-import type { IssueMetric, PullRequestMetric, CheckRunMetric, RepositoryMetric, ErrorMetric } from '../../../types/metrics'
+import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryMetric, ErrorMetric } from '../../../types/metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
 import type { AggregateType } from '../../../types/aggregates'
 import { randomUUID } from 'node:crypto'
@@ -12,10 +12,10 @@ type ProgressCallback = (progress: CollectorProgress) => void
 
 function deriveCiStatus(
   prs: PullRequestMetric[],
-  checkRuns: CheckRunMetric[],
+  workflowRuns: WorkflowRunMetric[],
 ): PullRequestMetric[] {
-  const runsBySha = new Map<string, CheckRunMetric[]>()
-  for (const run of checkRuns) {
+  const runsBySha = new Map<string, WorkflowRunMetric[]>()
+  for (const run of workflowRuns) {
     if (!run.headSha) continue
     const list = runsBySha.get(run.headSha) ?? []
     list.push(run)
@@ -85,7 +85,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
     baseUrl: apiUrl,
   })
 
-  const rawCache = new TtlCache<IssueMetric[] | PullRequestMetric[] | CheckRunMetric[]>(5 * 60 * 1000)
+  const rawCache = new TtlCache<IssueMetric[] | PullRequestMetric[] | WorkflowRunMetric[]>(5 * 60 * 1000)
 
   function emit(stage: CollectorProgress['stage'], message: string) {
     onProgress?.({ stage, message })
@@ -127,18 +127,18 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
     }
   }
 
-  async function collectCheckRuns(): Promise<{ checkRuns: CheckRunMetric[]; errors: string[] }> {
-    const cached = rawCache.get('checkRuns') as CheckRunMetric[] | undefined
-    if (cached) return { checkRuns: cached, errors: [] }
+  async function collectWorkflowRuns(): Promise<{ workflowRuns: WorkflowRunMetric[]; errors: string[] }> {
+    const cached = rawCache.get('workflowRuns') as WorkflowRunMetric[] | undefined
+    if (cached) return { workflowRuns: cached, errors: [] }
 
     try {
       emit('fetching', 'Fetching workflow runs from GitHub...')
-      const checkRuns = await apiClient.fetchCheckRuns()
-      rawCache.set('checkRuns', checkRuns)
-      return { checkRuns, errors: [] }
+      const workflowRuns = await apiClient.fetchWorkflowRuns()
+      rawCache.set('workflowRuns', workflowRuns)
+      return { workflowRuns, errors: [] }
     } catch (err) {
-      const msg = `Failed to fetch check runs: ${err instanceof Error ? err.message : String(err)}`
-      return { checkRuns: [], errors: [msg] }
+      const msg = `Failed to fetch workflow runs: ${err instanceof Error ? err.message : String(err)}`
+      return { workflowRuns: [], errors: [msg] }
     }
   }
 
@@ -169,18 +169,18 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
       const { prs, errors: prErrors } = await collectPullRequests()
       allErrors.push(...prErrors)
 
-      const { checkRuns, errors: checkRunErrors } = await collectCheckRuns()
-      allErrors.push(...checkRunErrors)
+      const { workflowRuns, errors: workflowRunErrors } = await collectWorkflowRuns()
+      allErrors.push(...workflowRunErrors)
 
       const { repo, errors: repoErrors } = await collectRepository()
       allErrors.push(...repoErrors)
 
       emit('deriving', 'Computing aggregate signals...')
 
-      const prsWithCi = deriveCiStatus(prs, checkRuns)
+      const prsWithCi = deriveCiStatus(prs, workflowRuns)
 
       const deriveConfig = { staleThresholdDays, lookbackDays }
-      const aggregates = deriveAll(issues, prsWithCi, checkRuns, deriveConfig)
+      const aggregates = deriveAll(issues, prsWithCi, workflowRuns, deriveConfig)
 
       const captureTime = new Date()
       const capturedAt = captureTime.toISOString()
@@ -202,7 +202,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         capturedAt,
         issues,
         pullRequests: prsWithCi,
-        checkRuns,
+        workflowRuns,
         repositories: repo ? [repo] : [],
         sessions: [],
         localGit: [],
@@ -257,7 +257,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         capturedAt,
         issuesCount: issues.length,
         prsCount: prsWithCi.length,
-        checkRunsCount: checkRuns.length,
+        workflowRunsCount: workflowRuns.length,
         errors: allErrors,
         partialData,
         durationMs: Date.now() - startTime,

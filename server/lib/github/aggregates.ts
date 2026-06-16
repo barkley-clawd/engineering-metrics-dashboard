@@ -5,7 +5,7 @@ import type {
   StaleWorkAggregate,
   DashboardAggregates,
 } from '../../../types/aggregates'
-import type { IssueMetric, PullRequestMetric, CheckRunMetric } from '../../../types/metrics'
+import type { IssueMetric, PullRequestMetric, WorkflowRunMetric } from '../../../types/metrics'
 
 function isInPeriod(dateStr: string | null, periodStart: string, periodEnd: string): boolean {
   if (!dateStr) return false
@@ -112,11 +112,11 @@ export function deriveStaleWork(
 }
 
 export function deriveCI(
-  checkRuns: CheckRunMetric[],
+  workflowRuns: WorkflowRunMetric[],
   periodStart: string,
   periodEnd: string,
 ): CIAggregate {
-  const runs = checkRuns.filter(
+  const runs = workflowRuns.filter(
     cr => cr.status === 'completed' && isInPeriod(cr.createdAt, periodStart, periodEnd),
   )
   const totalRuns = runs.length
@@ -157,7 +157,7 @@ export function deriveMergeRate(
 export function deriveAll(
   issues: IssueMetric[],
   prs: PullRequestMetric[],
-  checkRuns: CheckRunMetric[],
+  workflowRuns: WorkflowRunMetric[],
   config: { staleThresholdDays: number; lookbackDays: number },
 ): DashboardAggregates {
   const now = new Date()
@@ -167,7 +167,7 @@ export function deriveAll(
   const throughput = deriveThroughput(issues, prs, periodStart, periodEnd)
   const cycleTime = deriveCycleTime(prs, periodStart, periodEnd)
   const staleWork = deriveStaleWork(issues, prs, config.staleThresholdDays, now.toISOString())
-  const ci = deriveCI(checkRuns, periodStart, periodEnd)
+  const ci = deriveCI(workflowRuns, periodStart, periodEnd)
 
   return {
     throughput,

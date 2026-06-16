@@ -69,7 +69,7 @@ function makeSnapshot(overrides: Partial<MetricSnapshot> = {}): MetricSnapshot {
     capturedAt: '2026-06-05T12:00:00Z',
     issues: [],
     pullRequests: [],
-    checkRuns: [],
+    workflowRuns: [],
     repositories: [],
     sessions: [],
     localGit: [],

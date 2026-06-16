@@ -14,7 +14,7 @@ import type { DashboardAggregates, AggregateType } from '../../../types/aggregat
 import type {
   IssueMetric,
   PullRequestMetric,
-  CheckRunMetric,
+  WorkflowRunMetric,
   RepositoryIdentity,
   RepositoryMetric,
   SessionMetric,
@@ -94,7 +94,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
 
       let issues: IssueMetric[] = []
       let pullRequests: PullRequestMetric[] = []
-      let checkRuns: CheckRunMetric[] = []
+      let workflowRuns: WorkflowRunMetric[] = []
       let repositories: RepositoryIdentity[] = []
       let sessions: SessionMetric[] = []
       let localGit: LocalGitRepoMetric[] = []
@@ -116,7 +116,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
             if (ghResult.snapshot) {
               issues.push(...ghResult.snapshot.issues)
               pullRequests.push(...ghResult.snapshot.pullRequests)
-              checkRuns.push(...ghResult.snapshot.checkRuns)
+              workflowRuns.push(...ghResult.snapshot.workflowRuns)
               repositories.push(...ghResult.snapshot.repositories.map(normalizeRepositoryMetric))
             }
             allErrors.push(...ghResult.errors)
@@ -169,7 +169,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
 
       if (config.github && config.github.length > 0) {
         const deriveConfig = { staleThresholdDays: 14, lookbackDays: 30 }
-        aggregates = deriveAll(issues, pullRequests, checkRuns, deriveConfig)
+        aggregates = deriveAll(issues, pullRequests, workflowRuns, deriveConfig)
         aggregates.throughput.totalCommits = localGit.reduce((sum, r) => sum + r.recentCommits, 0)
       }
 
@@ -215,7 +215,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
         capturedAt,
         issues,
         pullRequests,
-        checkRuns,
+        workflowRuns,
         repositories: repositories.reduce<RepositoryIdentity[]>((acc, repo) => {
           const existing = acc.find(item => item.repoKey === repo.repoKey)
           if (!existing) {

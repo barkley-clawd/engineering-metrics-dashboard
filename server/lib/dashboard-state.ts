@@ -230,7 +230,7 @@ function buildCycleTimeSummary(rows: DailyMetricsRow[]): DashboardWindowCycleTim
 function buildCiSummary(rows: DailyMetricsRow[]): DashboardWindowCISummary {
   const ciRows = rows.filter(row => row.ciTotalRuns > 0 || row.ciPassCount > 0 || row.ciFailCount > 0)
   const configuredGithub = hasGithubConfig()
-  const hasSourceError = hasWarning(rows, [/check run/i, /workflow/i, /GitHub/i])
+  const hasSourceError = hasWarning(rows, [/workflow run/i, /workflow/i, /GitHub/i])
   const totalRuns = sumBy(ciRows, row => row.ciTotalRuns)
   const passCount = sumBy(ciRows, row => row.ciPassCount)
   const failCount = sumBy(ciRows, row => row.ciFailCount)
@@ -251,7 +251,7 @@ function buildCiSummary(rows: DailyMetricsRow[]): DashboardWindowCISummary {
     message = 'CI health unavailable - configure GitHub access'
   } else if (hasSourceError && totalRuns === 0) {
     status = 'unavailable'
-    message = 'CI data unavailable - GitHub check runs could not be collected'
+    message = 'CI data unavailable - GitHub workflow runs could not be collected'
   } else if (totalRuns === 0) {
     status = 'empty'
     message = 'No CI data in this window'

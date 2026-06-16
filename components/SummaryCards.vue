@@ -81,7 +81,7 @@
       <EmptyState
         v-else
         :message="ci?.message ?? 'CI unavailable'"
-        hint="GitHub Actions or check-run data is required"
+        hint="GitHub Actions or workflow run data is required"
       />
     </UiCard>
 
