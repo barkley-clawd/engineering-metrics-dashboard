@@ -13,6 +13,7 @@ export interface RefreshRunResult {
   success: boolean
   partialData: boolean
   sources: string[]
+  warnings: string[]
   errors: string[]
   errorSummary: string | null
   skipped: boolean
@@ -22,6 +23,7 @@ export interface RefreshRunResult {
 
 export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): OrchestratorConfig {
   const config: OrchestratorConfig = {}
+  const discoveryWarnings: string[] = []
 
   function normalizeDiscoveredPath(entry: string | { path: string }): string {
     return typeof entry === 'string' ? entry : entry.path
@@ -83,6 +85,7 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
       const discovered = discoverGitRepos(discoveryConfig)
       for (const warning of discovered.warnings) {
         console.warn(`[signal-house] Repo discovery warning at ${warning.path}: ${warning.message}`)
+        discoveryWarnings.push(`${warning.path}: ${warning.message}`)
       }
       for (const repo of discovered.repos) {
         const p = normalizeDiscoveredPath(repo)
@@ -106,6 +109,9 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
     config.localGit = {
       repos: repoConfigs,
     }
+  }
+  if (discoveryWarnings.length > 0) {
+    config.discoveryWarnings = discoveryWarnings
   }
 
   const sessionsConfig: SessionCollectorConfig = {}
@@ -145,6 +151,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       success: false,
       partialData: false,
       sources: [],
+      warnings: [],
       errors: [],
       errorSummary: 'Refresh already in progress',
       skipped: true,
@@ -169,7 +176,8 @@ export async function runRefresh(): Promise<RefreshRunResult> {
   setRefreshRunStatus('running')
 
   try {
-    const orchestrator = createOrchestrator(buildRefreshConfig())
+    const refreshConfig = buildRefreshConfig()
+    const orchestrator = createOrchestrator(refreshConfig)
     const orchestratorResult = await orchestrator.collect()
     const success = orchestratorResult.errors.length === 0
 
@@ -180,6 +188,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       success,
       partialData: orchestratorResult.partialData,
       sources: orchestratorResult.sources,
+      warnings: refreshConfig.discoveryWarnings ?? [],
       errors: orchestratorResult.errors,
       errorSummary: orchestratorResult.errors[0] ?? null,
       skipped: false,
@@ -193,6 +202,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       success: result.success,
       partialData: result.partialData,
       sources: result.sources,
+      warnings: result.warnings,
       errorSummary: result.errorSummary,
       skipped: result.skipped,
       skippedReason: result.skippedReason,
@@ -207,6 +217,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       success: false,
       partialData: false,
       sources: [],
+      warnings: [],
       errors: [message],
       errorSummary: message,
       skipped: false,
@@ -220,6 +231,7 @@ export async function runRefresh(): Promise<RefreshRunResult> {
       success: result.success,
       partialData: result.partialData,
       sources: result.sources,
+      warnings: result.warnings,
       errorSummary: result.errorSummary,
       skipped: result.skipped,
       skippedReason: result.skippedReason,

@@ -181,6 +181,7 @@ export interface RefreshRunRecord {
   success: boolean
   partialData: boolean
   sources: string[]
+  warnings?: string[]
   errorSummary: string | null
   skipped: boolean
   skippedReason: string | null

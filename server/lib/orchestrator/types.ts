@@ -6,6 +6,7 @@ export interface OrchestratorConfig {
   github?: GitHubCollectorConfig
   localGit?: LocalGitCollectorConfig
   sessions?: SessionCollectorConfig
+  discoveryWarnings?: string[]
 }
 
 export interface OrchestratorResult {

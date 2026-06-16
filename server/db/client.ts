@@ -62,12 +62,25 @@ function saveRefreshState(state: RefreshRunState): void {
   save()
 }
 
-function buildSourceHealth(sources: string[], status: RefreshRunStatus, errorSummary: string | null): Record<string, RefreshSourceHealth> {
+function buildSourceHealth(
+  sources: string[],
+  status: RefreshRunStatus,
+  errorSummary: string | null,
+  discoveryWarnings: string[] = [],
+): Record<string, RefreshSourceHealth> {
   const health: Record<string, RefreshSourceHealth> = {}
+  const warningSummary = discoveryWarnings.length > 0
+    ? `Discovery warnings: ${discoveryWarnings.join(' | ')}`
+    : null
   for (const source of sources) {
+    const message = errorSummary ?? (source === 'localGit' ? warningSummary : null)
     health[source] = {
-      status: status === 'success' ? 'healthy' : status === 'skipped' ? 'unknown' : 'degraded',
-      message: errorSummary,
+      status: status === 'success'
+        ? (source === 'localGit' && warningSummary ? 'degraded' : 'healthy')
+        : status === 'skipped'
+          ? 'unknown'
+          : 'degraded',
+      message,
     }
   }
   return health
@@ -265,7 +278,12 @@ export function setRefreshRunState(record: RefreshRunRecord): void {
     nextRunAt: null,
     lastError: record.errorSummary,
     durationMs: record.durationMs,
-    sourceHealth: buildSourceHealth(record.sources, record.skipped ? 'skipped' : record.success ? 'success' : 'failed', record.errorSummary),
+    sourceHealth: buildSourceHealth(
+      record.sources,
+      record.skipped ? 'skipped' : record.success ? 'success' : 'failed',
+      record.errorSummary,
+      record.warnings ?? [],
+    ),
     runHistory: [record, ...previous.runHistory].slice(0, MAX_REFRESH_HISTORY),
   }
 

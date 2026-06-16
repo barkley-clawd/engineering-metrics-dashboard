@@ -110,6 +110,23 @@ describe('buildRefreshConfig', () => {
     })
   })
 
+  it('includes discovery warnings in the refresh config', () => {
+    mocks.mockDiscoverGitRepos.mockReturnValue({
+      repos: [],
+      warnings: [
+        { path: '/workspace', message: 'Unable to read directory: permission denied' },
+      ],
+    })
+
+    vi.stubEnv('SECRET_HOUSE_PROJECT_ROOTS', '/workspace')
+
+    const config = buildRefreshConfig()
+
+    expect(config.discoveryWarnings).toEqual([
+      '/workspace: Unable to read directory: permission denied',
+    ])
+  })
+
   it('deduplicates when explicit and discovered repos overlap', () => {
     mocks.mockDiscoverGitRepos.mockReturnValue({
       repos: [

@@ -85,4 +85,26 @@ describe('initDb on fresh database', () => {
     const latestState = getLatestState()
     expect(latestState.refreshState.runHistory).toHaveLength(10)
   })
+
+  it('includes discovery warnings in local source health', async () => {
+    await initDb()
+
+    setRefreshRunState({
+      startedAt: '2026-06-15T10:00:00.000Z',
+      finishedAt: '2026-06-15T10:00:30.000Z',
+      durationMs: 30000,
+      success: true,
+      partialData: false,
+      sources: ['localGit'],
+      warnings: ['root /workspace: permission denied'],
+      errorSummary: null,
+      skipped: false,
+      skippedReason: null,
+    })
+
+    const runState = getRefreshRunState()
+    expect(runState.sourceHealth.localGit?.status).toBe('degraded')
+    expect(runState.sourceHealth.localGit?.message).toContain('Discovery warnings')
+    expect(runState.sourceHealth.localGit?.message).toContain('permission denied')
+  })
 })
