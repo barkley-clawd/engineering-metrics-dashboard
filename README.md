@@ -436,3 +436,7 @@ When adding a metric, ask:
 
 If the answer is unclear, do not add the metric yet.
 
+## License
+
+Signal House is licensed under the MIT License.
+
