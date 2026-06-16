@@ -139,7 +139,7 @@ describe('createApiClient', () => {
     expect(prs[0]!.changedFiles).toBe(2)
   })
 
-  it('maps check runs from GitHub API response', async () => {
+  it('maps workflow runs from GitHub API response', async () => {
     let callCount = 0
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     fetchSpy.mockImplementation(() => {
@@ -169,20 +169,20 @@ describe('createApiClient', () => {
     })
 
     const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
-    const checks = await client.fetchCheckRuns()
+    const runs = await client.fetchWorkflowRuns()
 
-    expect(checks).toHaveLength(2)
-    expect(checks[0]!.id).toBe('100')
-    expect(checks[0]!.conclusion).toBe('success')
-    expect(checks[0]!.status).toBe('completed')
-    expect(checks[0]!.completedAt).toBe('2025-01-06T01:00:00Z')
-    expect(checks[0]!.workflowName).toBe('CI Pipeline')
-    expect(checks[0]!.branch).toBe('main')
-    expect(checks[1]!.conclusion).toBe('failure')
-    expect(checks[1]!.branch).toBe('feat')
+    expect(runs).toHaveLength(2)
+    expect(runs[0]!.id).toBe('100')
+    expect(runs[0]!.conclusion).toBe('success')
+    expect(runs[0]!.status).toBe('completed')
+    expect(runs[0]!.completedAt).toBe('2025-01-06T01:00:00Z')
+    expect(runs[0]!.workflowName).toBe('CI Pipeline')
+    expect(runs[0]!.branch).toBe('main')
+    expect(runs[1]!.conclusion).toBe('failure')
+    expect(runs[1]!.branch).toBe('feat')
   })
 
-  it('maps in-progress check runs without completedAt', async () => {
+  it('maps in-progress workflow runs without completedAt', async () => {
     let callCount = 0
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     fetchSpy.mockImplementation(() => {
@@ -205,15 +205,15 @@ describe('createApiClient', () => {
     })
 
     const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
-    const checks = await client.fetchCheckRuns()
+    const runs = await client.fetchWorkflowRuns()
 
-    expect(checks).toHaveLength(1)
-    expect(checks[0]!.status).toBe('in_progress')
-    expect(checks[0]!.conclusion).toBeNull()
-    expect(checks[0]!.completedAt).toBeNull()
+    expect(runs).toHaveLength(1)
+    expect(runs[0]!.status).toBe('in_progress')
+    expect(runs[0]!.conclusion).toBeNull()
+    expect(runs[0]!.completedAt).toBeNull()
   })
 
-  it('fetchCheckRuns falls back to Workflow id when workflow fetch fails', async () => {
+  it('fetchWorkflowRuns falls back to Workflow id when workflow fetch fails', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
@@ -228,10 +228,10 @@ describe('createApiClient', () => {
       ]), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
 
     const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
-    const checks = await client.fetchCheckRuns()
+    const runs = await client.fetchWorkflowRuns()
 
-    expect(checks).toHaveLength(1)
-    expect(checks[0]!.workflowName).toBe('Workflow 42')
+    expect(runs).toHaveLength(1)
+    expect(runs[0]!.workflowName).toBe('Workflow 42')
   })
 
   it('handles API errors gracefully', async () => {

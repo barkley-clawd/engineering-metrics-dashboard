@@ -1,7 +1,7 @@
 import type {
   IssueMetric,
   PullRequestMetric,
-  CheckRunMetric,
+  WorkflowRunMetric,
   RepositoryIdentity,
   RepositoryMetric,
   SessionMetric,
@@ -16,7 +16,7 @@ export interface MetricSnapshot {
   capturedAt: string
   issues: IssueMetric[]
   pullRequests: PullRequestMetric[]
-  checkRuns: CheckRunMetric[]
+  workflowRuns: WorkflowRunMetric[]
   repositories: RepositoryIdentity[]
   sessions: SessionMetric[]
   localGit: LocalGitRepoMetric[]

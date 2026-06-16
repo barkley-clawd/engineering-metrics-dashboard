@@ -33,7 +33,7 @@ export interface PullRequestMetric {
   ciStatus: 'pending' | 'success' | 'failure' | 'cancelled' | null
 }
 
-export interface CheckRunMetric {
+export interface WorkflowRunMetric {
   id: string
   name: string
   status: 'queued' | 'in_progress' | 'completed'
@@ -106,6 +106,6 @@ export interface LocalGitRepoMetric {
   error: string | null
 }
 
-export type MetricDomain = 'issues' | 'pullRequests' | 'checkRuns' | 'repositories' | 'sessions' | 'localGit' | 'errors'
+export type MetricDomain = 'issues' | 'pullRequests' | 'workflowRuns' | 'repositories' | 'sessions' | 'localGit' | 'errors'
 
-export type MetricRecord = IssueMetric | PullRequestMetric | CheckRunMetric | RepositoryMetric | SessionMetric | LocalGitRepoMetric | ErrorMetric
+export type MetricRecord = IssueMetric | PullRequestMetric | WorkflowRunMetric | RepositoryMetric | SessionMetric | LocalGitRepoMetric | ErrorMetric

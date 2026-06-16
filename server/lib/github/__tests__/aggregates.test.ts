@@ -6,7 +6,7 @@ import {
   deriveCI,
   deriveMergeRate,
 } from '../aggregates'
-import type { IssueMetric, PullRequestMetric, CheckRunMetric } from '../../../../types/metrics'
+import type { IssueMetric, PullRequestMetric, WorkflowRunMetric } from '../../../../types/metrics'
 
 function makeIssue(overrides: Partial<IssueMetric> & { id: string }): IssueMetric {
   return {
@@ -47,7 +47,7 @@ function makePR(overrides: Partial<PullRequestMetric> & { id: string }): PullReq
   }
 }
 
-function makeCheckRun(overrides: Partial<CheckRunMetric> & { id: string }): CheckRunMetric {
+function makeWorkflowRun(overrides: Partial<WorkflowRunMetric> & { id: string }): WorkflowRunMetric {
   return {
     name: 'test',
     status: 'completed',
@@ -161,10 +161,10 @@ describe('deriveCI', () => {
 
   it('computes pass rate and counts', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'failure', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
-      makeCheckRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-07T01:00:00Z' }),
-      makeCheckRun({ id: '4', createdAt: '2025-02-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-02-01T01:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'failure', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
+      makeWorkflowRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-07T01:00:00Z' }),
+      makeWorkflowRun({ id: '4', createdAt: '2025-02-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-02-01T01:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(3)
@@ -176,8 +176,8 @@ describe('deriveCI', () => {
 
   it('computes average duration correctly', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-01T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-01-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-01T03:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-01T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-01-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-01T03:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     const expected1 = 60 * 60 * 1000
@@ -187,7 +187,7 @@ describe('deriveCI', () => {
 
   it('returns null averageDurationMs when no runs have completedAt', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: null }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: null }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(1)
@@ -196,8 +196,8 @@ describe('deriveCI', () => {
 
   it('treats timed_out as failure', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'timed_out', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'timed_out', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.passCount).toBe(1)
@@ -207,10 +207,10 @@ describe('deriveCI', () => {
 
   it('does not count cancelled or skipped runs as pass or fail', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'cancelled', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
-      makeCheckRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: 'skipped', status: 'completed', completedAt: '2025-01-07T01:00:00Z' }),
-      makeCheckRun({ id: '4', createdAt: '2025-01-08T00:00:00Z', conclusion: 'action_required', status: 'completed', completedAt: '2025-01-08T01:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: 'cancelled', status: 'completed', completedAt: '2025-01-06T01:00:00Z' }),
+      makeWorkflowRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: 'skipped', status: 'completed', completedAt: '2025-01-07T01:00:00Z' }),
+      makeWorkflowRun({ id: '4', createdAt: '2025-01-08T00:00:00Z', conclusion: 'action_required', status: 'completed', completedAt: '2025-01-08T01:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(4)
@@ -221,9 +221,9 @@ describe('deriveCI', () => {
 
   it('excludes in-progress and queued runs', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: null, status: 'in_progress', completedAt: null }),
-      makeCheckRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: null, status: 'queued', completedAt: null }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-01-06T00:00:00Z', conclusion: null, status: 'in_progress', completedAt: null }),
+      makeWorkflowRun({ id: '3', createdAt: '2025-01-07T00:00:00Z', conclusion: null, status: 'queued', completedAt: null }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(1)
@@ -232,8 +232,8 @@ describe('deriveCI', () => {
 
   it('excludes runs outside the period', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2024-12-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2024-12-01T01:00:00Z' }),
-      makeCheckRun({ id: '2', createdAt: '2025-02-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-02-01T01:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2024-12-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2024-12-01T01:00:00Z' }),
+      makeWorkflowRun({ id: '2', createdAt: '2025-02-01T00:00:00Z', conclusion: 'success', status: 'completed', completedAt: '2025-02-01T01:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(0)
@@ -242,7 +242,7 @@ describe('deriveCI', () => {
 
   it('handles null conclusion on completed runs', () => {
     const checks = [
-      makeCheckRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: null, status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
+      makeWorkflowRun({ id: '1', createdAt: '2025-01-05T00:00:00Z', conclusion: null, status: 'completed', completedAt: '2025-01-05T01:00:00Z' }),
     ]
     const result = deriveCI(checks, ps, pe)
     expect(result.totalRuns).toBe(1)

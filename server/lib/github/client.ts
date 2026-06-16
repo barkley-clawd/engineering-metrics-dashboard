@@ -1,4 +1,4 @@
-import type { IssueMetric, PullRequestMetric, CheckRunMetric, RepositoryMetric } from '../../../types/metrics'
+import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryMetric } from '../../../types/metrics'
 import type {
   GHIssueRaw,
   GHPullRequestRaw,
@@ -176,12 +176,12 @@ export function createApiClient(opts: PAClientOptions) {
       return { prs, warnings }
     },
 
-    async fetchCheckRuns(): Promise<CheckRunMetric[]> {
+    async fetchWorkflowRuns(): Promise<WorkflowRunMetric[]> {
       const workflowNames = await fetchWorkflows()
       const raw = await paginate<GHWorkflowRunRaw>('/actions/runs?status=all&per_page=100')
-      const checks: CheckRunMetric[] = []
+      const runs: WorkflowRunMetric[] = []
       for (const item of raw) {
-        checks.push({
+        runs.push({
           id: String(item.id),
           name: item.name,
           status: item.status,
@@ -196,7 +196,7 @@ export function createApiClient(opts: PAClientOptions) {
           url: item.html_url,
         })
       }
-      return checks
+      return runs
     },
 
     async fetchRepository(): Promise<RepositoryMetric> {

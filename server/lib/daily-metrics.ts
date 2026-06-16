@@ -44,14 +44,14 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
   const issuesClosedByDay = countByDay(snapshot.issues, (i) => i.closedAt)
   const prsCreatedByDay = countByDay(snapshot.pullRequests, (pr) => pr.createdAt)
   const prsMergedByDay = countByDay(snapshot.pullRequests, (pr) => pr.mergedAt)
-  const ciCompletedByDay = countByDay(snapshot.checkRuns, (cr) => cr.completedAt)
+  const ciCompletedByDay = countByDay(snapshot.workflowRuns, (cr) => cr.completedAt)
 
   const ciPassByDay = countByDay(
-    snapshot.checkRuns.filter((cr) => cr.conclusion === 'success'),
+    snapshot.workflowRuns.filter((cr) => cr.conclusion === 'success'),
     (cr) => cr.completedAt,
   )
   const ciFailByDay = countByDay(
-    snapshot.checkRuns.filter((cr) => cr.conclusion === 'failure' || cr.conclusion === 'timed_out' || cr.conclusion === 'startup_failure'),
+    snapshot.workflowRuns.filter((cr) => cr.conclusion === 'failure' || cr.conclusion === 'timed_out' || cr.conclusion === 'startup_failure'),
     (cr) => cr.completedAt,
   )
 

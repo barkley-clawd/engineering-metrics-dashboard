@@ -88,7 +88,7 @@ export interface CollectorResult {
   capturedAt: string
   issuesCount: number
   prsCount: number
-  checkRunsCount: number
+  workflowRunsCount: number
   errors: string[]
   partialData: boolean
   durationMs: number
