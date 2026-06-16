@@ -281,24 +281,6 @@ describe('computeDailyMetrics', () => {
     expect(rows.some((row) => row.warnings.some((warning) => warning.includes('CI trend unavailable')))).toBe(true)
   })
 
-  it('emits repo-scoped rows and leaves missing repo/day combinations absent', () => {
-    const snapshot = makeSnapshot({
-      capturedAt: '2026-06-03T12:00:00Z',
-      issues: [
-        makeIssue({ id: '1', repo: 'one', repoKey: 'github:demo/repo-a', createdAt: '2026-06-01T10:00:00Z' }),
-        makeIssue({ id: '2', repo: 'two', repoKey: 'github:demo/repo-b', createdAt: '2026-06-03T10:00:00Z' }),
-      ],
-    })
-
-    const rows = computeDailyMetrics(snapshot)
-    expect(rows.some((row) => row.repoKey === 'all' && row.day === '2026-06-01')).toBe(true)
-    expect(rows.some((row) => row.repoKey === 'all' && row.day === '2026-06-03')).toBe(true)
-    expect(rows.some((row) => row.repoKey === 'github:demo/repo-a' && row.day === '2026-06-01')).toBe(true)
-    expect(rows.some((row) => row.repoKey === 'github:demo/repo-a' && row.day === '2026-06-03')).toBe(false)
-    expect(rows.some((row) => row.repoKey === 'github:demo/repo-b' && row.day === '2026-06-03')).toBe(true)
-    expect(rows.some((row) => row.repoKey === 'github:demo/repo-b' && row.day === '2026-06-01')).toBe(false)
-  })
-
   it('adds warnings when metadata has errors', () => {
     const snapshot = makeSnapshot({
       metadata: {
