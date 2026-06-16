@@ -130,6 +130,7 @@ describe('GET /api/state', () => {
     const rows = [
       {
         day: '2026-06-14',
+        repoKey: 'all',
         capturedAt: '2026-06-14T12:00:00.000Z',
         source: 'orchestrated',
         version: 1,
@@ -157,6 +158,7 @@ describe('GET /api/state', () => {
       },
       {
         day: '2026-06-12',
+        repoKey: 'all',
         capturedAt: '2026-06-12T12:00:00.000Z',
         source: 'orchestrated',
         version: 1,
