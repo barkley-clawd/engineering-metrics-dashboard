@@ -4,6 +4,33 @@ import path from 'node:path'
 import type { SessionUsageAggregate } from '../../../types/aggregates'
 import type { SessionCollectorConfig, SessionCollectorResult } from './types'
 
+type SessionExport = {
+  info?: {
+    id?: string
+    time?: {
+      created?: number
+      updated?: number
+    }
+    summary?: unknown
+  }
+  messages?: Array<{
+    info?: {
+      role?: string
+      finish?: string
+      time?: {
+        created?: number
+        completed?: number
+      }
+    }
+    parts?: Array<{
+      type?: string
+      state?: {
+        status?: string
+      }
+    }>
+  }>
+}
+
 function isCommandNotFound(err: unknown): boolean {
   if (err instanceof Error) {
     const e = err as NodeJS.ErrnoException
@@ -58,6 +85,54 @@ function parseToolPercentage(value: string | undefined): number | null {
   return match ? parseNumber(match[1]) : null
 }
 
+function parseSessionList(output: string): string[] {
+  return output
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('ses_'))
+    .map(line => line.split(/\s+/)[0]!)
+}
+
+function parseSessionExport(output: string): SessionExport | null {
+  const start = output.indexOf('{')
+  if (start < 0) return null
+  try {
+    return JSON.parse(output.slice(start))
+  } catch {
+    return null
+  }
+}
+
+function analyzeSessionExport(data: SessionExport): {
+  startedAt: string | null
+  lastActivityAt: string | null
+  completedAt: string | null
+  status: 'completed' | 'errored' | 'stuck' | 'running' | 'unknown'
+} {
+  const startedAt = data.info?.time?.created ? new Date(data.info.time.created).toISOString() : null
+  const lastActivityAt = data.info?.time?.updated ? new Date(data.info.time.updated).toISOString() : null
+  const lastMessage = [...(data.messages ?? [])].reverse().find(message => message.info?.role === 'assistant' || message.info?.role === 'tool')
+  const completedAt = lastMessage?.info?.time?.completed ? new Date(lastMessage.info.time.completed).toISOString() : null
+  const hasError = (data.messages ?? []).some(message =>
+    (message.parts ?? []).some(part => part.state?.status === 'error'),
+  )
+  const hasToolCallFinish = lastMessage?.info?.role === 'assistant' && lastMessage.info.finish === 'tool-calls'
+
+  if (hasError) {
+    return { startedAt, lastActivityAt, completedAt, status: 'errored' }
+  }
+  if (hasToolCallFinish) {
+    return { startedAt, lastActivityAt, completedAt: null, status: 'stuck' }
+  }
+  if (completedAt != null) {
+    return { startedAt, lastActivityAt, completedAt, status: 'completed' }
+  }
+  if (lastActivityAt != null) {
+    return { startedAt, lastActivityAt, completedAt: null, status: 'running' }
+  }
+  return { startedAt, lastActivityAt: null, completedAt: null, status: 'unknown' }
+}
+
 export function createSessionCollector(config: SessionCollectorConfig = {}) {
   const periodDays = config.periodDays ?? 30
 
@@ -75,6 +150,42 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
 
       for (const cmd of candidates) {
         try {
+          const sessionListOutput = execFileSync(cmd, ['session', 'list'], {
+            timeout: 15_000,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'ignore'],
+          })
+          const sessionIds = parseSessionList(sessionListOutput)
+
+          const recentSessions = sessionIds.slice(0, 5)
+          let startedSessions = 0
+          let completedSessions = 0
+          let erroredSessions = 0
+          let stuckSessions = 0
+          let lastActivityAt: string | null = null
+
+          for (const sessionId of recentSessions) {
+            try {
+              const exported = execFileSync(cmd, ['export', sessionId, '--sanitize'], {
+                timeout: 15_000,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'ignore'],
+              })
+              const parsed = parseSessionExport(exported)
+              if (!parsed) continue
+              const analysis = analyzeSessionExport(parsed)
+              if (analysis.startedAt) startedSessions += 1
+              if (analysis.completedAt) completedSessions += 1
+              if (analysis.status === 'errored') erroredSessions += 1
+              if (analysis.status === 'stuck') stuckSessions += 1
+              if (analysis.lastActivityAt && (!lastActivityAt || analysis.lastActivityAt > lastActivityAt)) {
+                lastActivityAt = analysis.lastActivityAt
+              }
+            } catch {
+              // If a single session cannot be exported, keep the aggregate signal from the rest.
+            }
+          }
+
           const stdout = execFileSync(cmd, ['stats', '--days', String(periodDays)], {
             timeout: 15_000,
             encoding: 'utf-8',
@@ -130,6 +241,11 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
             periodStart,
             periodEnd,
             totalSessions,
+            startedSessions: startedSessions > 0 ? startedSessions : null,
+            completedSessions: completedSessions > 0 ? completedSessions : null,
+            erroredSessions: erroredSessions > 0 ? erroredSessions : null,
+            stuckSessions: stuckSessions > 0 ? stuckSessions : null,
+            lastActivityAt,
             messages,
             activeDays,
             totalCost,

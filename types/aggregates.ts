@@ -39,6 +39,11 @@ export interface SessionUsageAggregate {
   periodStart: string
   periodEnd: string
   totalSessions: number
+  startedSessions: number | null
+  completedSessions: number | null
+  erroredSessions: number | null
+  stuckSessions: number | null
+  lastActivityAt: string | null
   messages: number | null
   activeDays: number | null
   totalCost: number | null

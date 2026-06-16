@@ -87,6 +87,11 @@ export interface DashboardWindowStaleWorkSummary {
 export interface DashboardWindowSessionSummary {
   totalSessions: number
   sessionErrorCount: number
+  startedSessions: number | null
+  completedSessions: number | null
+  erroredSessions: number | null
+  stuckSessions: number | null
+  lastActivityAt: string | null
   status: DashboardPanelStatus
   message: string | null
 }
@@ -95,6 +100,11 @@ export interface DashboardWindowSessionUsageSummary {
   periodStart: string
   periodEnd: string
   totalSessions: number
+  startedSessions: number | null
+  completedSessions: number | null
+  erroredSessions: number | null
+  stuckSessions: number | null
+  lastActivityAt: string | null
   messages: number | null
   activeDays: number | null
   totalCost: number | null

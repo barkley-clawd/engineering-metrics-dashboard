@@ -4,8 +4,13 @@
       <div v-if="isActive" class="session-usage">
         <div class="session-usage__summary">
           <MetricCard label="Sessions" :value="sessionUsage.totalSessions" />
+          <MetricCard label="Started" :value="sessionUsage.startedSessions ?? '—'" />
+          <MetricCard label="Completed" :value="sessionUsage.completedSessions ?? '—'" />
+          <MetricCard label="Last activity" :value="formatTimestamp(sessionUsage.lastActivityAt)" />
           <MetricCard label="Messages" :value="sessionUsage.messages" />
           <MetricCard label="Active days" :value="sessionUsage.activeDays" />
+          <MetricCard label="Errors" :value="sessionUsage.erroredSessions ?? '—'" />
+          <MetricCard label="Stuck" :value="sessionUsage.stuckSessions ?? '—'" />
           <MetricCard label="Total cost" :value="sessionUsage.totalCost" />
         </div>
 
@@ -101,6 +106,11 @@ function formatNumber(value: number | null | undefined): string {
 function formatCurrency(value: number | null | undefined): string {
   if (value == null) return '—'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+}
+
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleString()
 }
 
 function formatPercent(value: number | null | undefined): string {

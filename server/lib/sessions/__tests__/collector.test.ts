@@ -40,6 +40,30 @@ function cliOutput(overview: Record<string, number | string>, tools: Array<{ nam
   ].join('\n')
 }
 
+function sessionListOutput(ids: string[] = []): string {
+  return [
+    'Session ID                      Title                                   Updated',
+    '───────────────────────────────────────────────────────────────────────────────',
+    ...ids.map((id, index) => `${id.padEnd(31)}  Session ${index + 1}`.padEnd(79)),
+  ].join('\n')
+}
+
+function sessionExport(id: string, overrides: Record<string, unknown> = {}): string {
+  const overrideInfo = typeof overrides.info === 'object' && overrides.info != null ? overrides.info as Record<string, unknown> : {}
+  return JSON.stringify({
+    info: {
+      id,
+      time: {
+        created: 1781625988788,
+        updated: 1781626315884,
+      },
+      ...overrideInfo,
+    },
+    messages: [],
+    ...overrides,
+  }, null, 2)
+}
+
 describe('createSessionCollector', () => {
   it('parses opencode stats output into sessions and aggregate', async () => {
     const mockOutput = cliOutput(
@@ -62,6 +86,7 @@ describe('createSessionCollector', () => {
       ],
     )
 
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(mockOutput + '\n')
 
     const collector = createSessionCollector()
@@ -104,6 +129,7 @@ describe('createSessionCollector', () => {
       [],
     )
 
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(mockOutput + '\n')
 
     const collector = createSessionCollector()
@@ -122,6 +148,7 @@ describe('createSessionCollector', () => {
       [],
     )
 
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(mockOutput + '\n')
 
     const collector = createSessionCollector()
@@ -153,6 +180,10 @@ describe('createSessionCollector', () => {
   it('prioritises opencodeBin over opencodeCommand when both are set', async () => {
     mockExecFileSync.mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
       expect(cmd).toBe('/custom/opencode-bin')
+      expect(args).toEqual(['session', 'list'])
+      return sessionListOutput() + '\n'
+    }).mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
+      expect(cmd).toBe('/custom/opencode-bin')
       expect(args).toEqual(['stats', '--days', '30'])
       return cliOutput({ Sessions: 0, Messages: 0, Days: 30 }, []) + '\n'
     })
@@ -170,6 +201,10 @@ describe('createSessionCollector', () => {
   it('uses custom opencode command from config.opencodeBin', async () => {
     mockExecFileSync.mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
       expect(cmd).toBe('/custom/opencode-bin')
+      expect(args).toEqual(['session', 'list'])
+      return sessionListOutput() + '\n'
+    }).mockImplementationOnce((cmd: string, args: readonly string[] | undefined) => {
+      expect(cmd).toBe('/custom/opencode-bin')
       expect(args).toEqual(['stats', '--days', '30'])
       return cliOutput({ Sessions: 0, Messages: 0, Days: 30 }, []) + '\n'
     })
@@ -182,6 +217,7 @@ describe('createSessionCollector', () => {
   })
 
   it('returns gap on unparseable CLI output', async () => {
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce('garbage output that is not a CLI table\n')
 
     const collector = createSessionCollector()
@@ -198,7 +234,8 @@ describe('createSessionCollector', () => {
     mockExecFileSync
       .mockImplementationOnce(() => { throw enoentErr() }) // 'opencode' not on PATH
       .mockImplementationOnce(() => { throw enoentErr() }) // $HOME/.opencode/bin/opencode not found
-      .mockImplementationOnce(() => cliOutput({ Sessions: 1, Messages: 0, Days: 1 }, []) + '\n') // known local path works
+      .mockImplementationOnce(() => sessionListOutput() + '\n') // known local path works
+      .mockImplementationOnce(() => cliOutput({ Sessions: 1, Messages: 0, Days: 1 }, []) + '\n')
 
     const collector = createSessionCollector()
     const result = await collector.collect()
@@ -208,18 +245,19 @@ describe('createSessionCollector', () => {
     expect(mockExecFileSync).toHaveBeenNthCalledWith(
       1,
       'opencode',
-      ['stats', '--days', '30'],
+      ['session', 'list'],
       expect.objectContaining({ encoding: 'utf-8' }),
     )
     expect(mockExecFileSync).toHaveBeenNthCalledWith(
       3,
       '/home/openclaw/.opencode/bin/opencode',
-      ['stats', '--days', '30'],
+      ['session', 'list'],
       expect.objectContaining({ encoding: 'utf-8' }),
     )
   })
 
   it('uses first executable candidate from candidate list', async () => {
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(cliOutput({ Sessions: 3, Messages: 0, Days: 30 }, []) + '\n')
 
     const collector = createSessionCollector({ opencodeBin: '/first/bin/opencode' })
@@ -228,7 +266,7 @@ describe('createSessionCollector', () => {
     expect(result.gap).toBeNull()
     expect(mockExecFileSync).toHaveBeenCalledWith(
       '/first/bin/opencode',
-      ['stats', '--days', '30'],
+      ['session', 'list'],
       expect.objectContaining({ encoding: 'utf-8' }),
     )
   })
@@ -250,6 +288,7 @@ describe('createSessionCollector', () => {
     vi.stubEnv('OPENCODE_BIN', '/env/opencode')
     vi.stubEnv('OPENCODE_COMMAND', '/env/old-opencode')
 
+    mockExecFileSync.mockReturnValueOnce(sessionListOutput() + '\n')
     mockExecFileSync.mockReturnValueOnce(cliOutput({ Sessions: 5, Messages: 0, Days: 30 }, []) + '\n')
 
     const collector = createSessionCollector()
@@ -259,7 +298,7 @@ describe('createSessionCollector', () => {
     expect(result.sessionUsage!.totalSessions).toBe(5)
     expect(mockExecFileSync).toHaveBeenCalledWith(
       '/env/opencode',
-      ['stats', '--days', '30'],
+      ['session', 'list'],
       expect.objectContaining({ encoding: 'utf-8' }),
     )
 
