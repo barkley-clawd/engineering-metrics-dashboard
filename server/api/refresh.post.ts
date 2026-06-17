@@ -1,3 +1,4 @@
+import { createError, defineEventHandler } from 'h3'
 import { runRefresh } from '../lib/refresh/run-refresh'
 
 export default defineEventHandler(async () => {

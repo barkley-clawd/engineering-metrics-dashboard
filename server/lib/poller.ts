@@ -83,7 +83,9 @@ export function startMetricsPoller(config: PollerConfig = getPollerConfig()): Po
       console.error('[poller] refresh loop failed:', error)
     } finally {
       inFlight = false
-      scheduleNext(config.intervalMs)
+      if (!stopped) {
+        scheduleNext(config.intervalMs)
+      }
     }
   }
 
@@ -102,4 +104,9 @@ export function startMetricsPoller(config: PollerConfig = getPollerConfig()): Po
 
   scheduleNext(config.runOnStartup ? config.startupDelayMs : config.intervalMs)
   return guard.runtime
+}
+
+export function stopMetricsPoller(): void {
+  const guard = getPollerGuard()
+  guard.runtime?.stop()
 }

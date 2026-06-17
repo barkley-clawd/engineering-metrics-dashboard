@@ -68,31 +68,44 @@ Nuxt keeps the server and UI in one place. Vue fits the dashboard UI well. TypeS
 
 ## Architecture
 
-Signal House runs as a local Node/Nuxt server.
+Signal House runs as a single long-running local Node/Nuxt daemon.
 
 ```text
-Nuxt server
+Signal House daemon (one local process)
 ├── serves the dashboard UI
 ├── exposes local API routes
-├── collects metrics from configured sources
-├── caches latest state in SQLite
-├── persists daily metric rollups
-├── tracks refresh and source health
-└── optionally polls in the background
+├── owns the local SQLite database
+├── boots the background refresh loop on process startup
+├── owns the scheduler lifecycle
+├── shares one refresh runner between scheduled and manual refresh
+├── rejects overlapping refreshes with a single in-process guard
+└── exits cleanly, clearing the poller timer and in-memory state
 ```
 
 The frontend only reads from local API routes. It does not call GitHub or local tools directly.
 
 The intended shape is:
 
-* server routes collect and cache metrics
+* one daemon process owns the local state and the refresh loop
+* the server routes collect and cache metrics
 * SQLite stores latest snapshots, daily rollups, refresh history, and source health
 * the UI reads cached/local state
-* manual refresh remains available
-* background polling can keep the dashboard warm
+* the background poller keeps the dashboard warm on its own schedule
+* manual refresh uses the same runner and the same concurrency guard as scheduled refresh
 * failed refreshes do not wipe the last good data
 
-This keeps the system inspectable and easy to run on the same machine that hosts Clawd.
+### Runtime contract
+
+Signal House is daemon-first and single-instance. It assumes:
+
+* exactly one long-running Signal House process per machine
+* the process owns the local SQLite database file
+* the background poller is started by the server process at startup, not by page or API requests
+* scheduled refresh and manual refresh share the same runner and the same single-flight guard
+* the poller timer and in-memory state are cleared on shutdown
+* dev/reload does not create duplicate poller loops or leave stale in-memory state behind
+
+Request-time collection, multi-instance, and serverless deployment models are not supported operating modes.
 
 ## Data sources
 
@@ -216,7 +229,7 @@ It parses the overview and tool usage output when available. If OpenCode is unav
 | `SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS` | Delay before the first scheduled run               | `5`     |
 | `SECRET_HOUSE_RUN_ON_STARTUP`             | Runs a refresh shortly after server startup        | `true`  |
 
-The poller is intended for a single local server process. Do not run multiple poller-enabled instances against the same local state unless locking is explicitly designed for it.
+The poller is owned by the Signal House daemon process. It is started at server boot, uses the same refresh runner as manual refresh, and stops cleanly when the daemon exits. Run exactly one Signal House daemon per machine. Do not run multiple poller-enabled instances against the same local state unless locking is explicitly designed for it.
 
 ### Database
 
@@ -236,29 +249,32 @@ The dashboard includes a manual refresh action.
 
 A manual refresh:
 
-* triggers collection from configured sources
-* runs in the background
+* uses the same refresh runner as the background poller
+* runs through the same in-process concurrency guard as scheduled refresh
 * keeps showing cached data while collection is running
-* rejects duplicate refreshes while another refresh is active
+* is rejected with `HTTP 409` if another refresh is already in progress (manual or scheduled)
 * preserves the last good data if collection fails
 
 GitHub rate limits still apply. If GitHub is slow, unreachable, or rate-limited, Signal House should show the cached snapshot with a clear stale or partial-data warning.
 
 ## Background polling
 
-When enabled, the Nuxt server starts a guarded background poller.
+When enabled, the Signal House daemon starts a guarded background poller at process startup.
 
 The poller:
 
+* is owned by the server process and started by `server/plugins/poller.ts`
 * waits for the configured startup delay
 * optionally runs once on startup
 * refreshes at the configured interval
 * uses the same refresh runner as manual refresh
-* avoids overlapping runs
+* uses the same in-process concurrency guard as manual refresh
+* avoids overlapping runs (scheduled ticks skip while another refresh is in flight)
 * records run status and source health
 * does not crash the server when a collector fails
+* stops cleanly when the daemon shuts down, clearing the timer and in-memory poller state
 
-Manual refresh and scheduled refresh must not fork into separate logic. They should share the same runner and concurrency guard.
+Manual refresh and scheduled refresh must not fork into separate logic. They share the same runner and the same concurrency guard. If a manual refresh is requested while the poller is mid-run, the manual endpoint responds with `409 Conflict`; if a scheduled tick fires while a manual refresh is running, the poller logs the skip and waits for the next interval.
 
 ## API shape
 

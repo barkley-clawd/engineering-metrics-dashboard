@@ -1,0 +1,99 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  mockStartMetricsPoller: vi.fn(),
+  mockStopMetricsPoller: vi.fn(),
+  mockGetPollerConfig: vi.fn(),
+}))
+
+vi.mock('../../lib/poller', () => ({
+  getPollerConfig: mocks.mockGetPollerConfig,
+  startMetricsPoller: mocks.mockStartMetricsPoller,
+  stopMetricsPoller: mocks.mockStopMetricsPoller,
+}))
+
+const mockHooks: { name: string; fn: (...args: unknown[]) => unknown }[] = []
+
+vi.mock('nitropack/runtime', () => ({
+  defineNitroPlugin: (def: (nitroApp: unknown) => unknown) => def,
+}))
+
+import pollerPlugin from '../poller'
+
+function makeNitroApp() {
+  return {
+    hooks: {
+      hook: (name: string, fn: (...args: unknown[]) => unknown) => {
+        mockHooks.push({ name, fn })
+        return () => {}
+      },
+    },
+  }
+}
+
+describe('poller plugin', () => {
+  beforeEach(() => {
+    mockHooks.length = 0
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('does not start the poller or register a close hook when disabled', () => {
+    mocks.mockGetPollerConfig.mockReturnValue({
+      enabled: false,
+      intervalMs: 300000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+
+    ;(pollerPlugin as (app: unknown) => void)(makeNitroApp())
+
+    expect(mocks.mockStartMetricsPoller).not.toHaveBeenCalled()
+    expect(mockHooks).toHaveLength(0)
+  })
+
+  it('starts the poller at process startup and stops it on the close hook', () => {
+    const runtime = { stop: vi.fn() }
+    mocks.mockGetPollerConfig.mockReturnValue({
+      enabled: true,
+      intervalMs: 300000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    mocks.mockStartMetricsPoller.mockReturnValue(runtime)
+
+    ;(pollerPlugin as (app: unknown) => void)(makeNitroApp())
+
+    expect(mocks.mockStartMetricsPoller).toHaveBeenCalledWith({
+      enabled: true,
+      intervalMs: 300000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+
+    const closeHook = mockHooks.find(h => h.name === 'close')
+    expect(closeHook).toBeDefined()
+
+    closeHook?.fn()
+    expect(runtime.stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw on close when startMetricsPoller returned null', () => {
+    mocks.mockGetPollerConfig.mockReturnValue({
+      enabled: true,
+      intervalMs: 300000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    mocks.mockStartMetricsPoller.mockReturnValue(null)
+
+    ;(pollerPlugin as (app: unknown) => void)(makeNitroApp())
+
+    const closeHook = mockHooks.find(h => h.name === 'close')
+    expect(closeHook).toBeDefined()
+    expect(() => closeHook?.fn()).not.toThrow()
+  })
+})

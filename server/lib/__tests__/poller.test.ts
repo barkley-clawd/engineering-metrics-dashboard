@@ -8,7 +8,7 @@ vi.mock('../refresh/run-refresh', () => ({
   runRefresh: mocks.mockRunRefresh,
 }))
 
-import { getPollerConfig, startMetricsPoller } from '../poller'
+import { getPollerConfig, startMetricsPoller, stopMetricsPoller } from '../poller'
 
 describe('getPollerConfig', () => {
   afterEach(() => {
@@ -56,8 +56,6 @@ describe('getPollerConfig', () => {
 describe('startMetricsPoller', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.spyOn(globalThis, 'setTimeout')
-    vi.spyOn(globalThis, 'clearTimeout')
     vi.clearAllMocks()
     mocks.mockRunRefresh.mockResolvedValue({
       startedAt: '2026-06-15T00:00:00.000Z',
@@ -77,7 +75,7 @@ describe('startMetricsPoller', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllEnvs()
-    startMetricsPoller({ enabled: false, intervalMs: 300000, runOnStartup: true, startupDelayMs: 5000 })?.stop()
+    stopMetricsPoller()
   })
 
   it('does nothing when disabled', () => {
@@ -85,7 +83,7 @@ describe('startMetricsPoller', () => {
     expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
   })
 
-  it('starts a guarded loop and avoids overlapping runs', async () => {
+  it('starts a guarded loop and avoids duplicate startups in the same process', async () => {
     const runtime = startMetricsPoller({
       enabled: true,
       intervalMs: 15000,
@@ -104,6 +102,119 @@ describe('startMetricsPoller', () => {
       startupDelayMs: 0,
     })
     expect(secondRuntime).toBe(runtime)
+    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+    runtime?.stop()
+  })
+
+  it('clears the pending timer and in-memory state on stop', async () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+
+    const runtime = startMetricsPoller({
+      enabled: true,
+      intervalMs: 15000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    expect(runtime).toBeTruthy()
+
+    runtime?.stop()
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+
+    await vi.runOnlyPendingTimersAsync()
+    expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
+
+    clearTimeoutSpy.mockRestore()
+  })
+
+  it('prevents further runs after stop, but allows a fresh start after stop', async () => {
+    const runtime = startMetricsPoller({
+      enabled: true,
+      intervalMs: 15000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    expect(runtime).toBeTruthy()
+
+    runtime?.stop()
+    await vi.runOnlyPendingTimersAsync()
+    expect(mocks.mockRunRefresh).not.toHaveBeenCalled()
+
+    const restarted = startMetricsPoller({
+      enabled: true,
+      intervalMs: 15000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    expect(restarted).toBeTruthy()
+    expect(restarted).not.toBe(runtime)
+
+    await vi.runOnlyPendingTimersAsync()
+    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+
+    restarted?.stop()
+  })
+
+  it('skips a scheduled tick while a previous refresh is still in flight', async () => {
+    const pendingResult = {
+      startedAt: '2026-06-15T00:00:00.000Z',
+      finishedAt: '2026-06-15T00:00:01.000Z',
+      durationMs: 1000,
+      success: true,
+      partialData: false,
+      sources: [],
+      errors: [],
+      errorSummary: null,
+      skipped: false,
+      skippedReason: null,
+      orchestratorResult: null,
+    }
+    let releaseFirst: () => void = () => {}
+    let calls = 0
+    const pendingPromise = new Promise<unknown>((resolve) => {
+      releaseFirst = () => { resolve(pendingResult) }
+    })
+    mocks.mockRunRefresh.mockImplementation(() => {
+      calls += 1
+      if (calls === 1) {
+        return pendingPromise
+      }
+      return Promise.resolve(pendingResult)
+    })
+
+    const runtime = startMetricsPoller({
+      enabled: true,
+      intervalMs: 15000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    expect(runtime).toBeTruthy()
+
+    await vi.runOnlyPendingTimersAsync()
+    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(15000 * 5)
+    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(1)
+
+    releaseFirst()
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(mocks.mockRunRefresh).toHaveBeenCalledTimes(2)
+
+    runtime?.stop()
+  })
+
+  it('stopMetricsPoller stops the active runtime and is a no-op when nothing is running', () => {
+    expect(() => stopMetricsPoller()).not.toThrow()
+
+    const runtime = startMetricsPoller({
+      enabled: true,
+      intervalMs: 15000,
+      runOnStartup: true,
+      startupDelayMs: 0,
+    })
+    expect(runtime).toBeTruthy()
+
+    stopMetricsPoller()
+    expect(runtime).toBeTruthy()
     runtime?.stop()
   })
 })
