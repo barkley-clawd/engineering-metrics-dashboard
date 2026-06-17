@@ -358,4 +358,48 @@ describe('runRefresh', () => {
     expect(result.errorSummary).toBe('collector blew up')
     expect(mocks.mockSetRefreshInProgress).toHaveBeenCalledTimes(2)
   })
+
+  it('propagates the full orchestrator result structure on success', async () => {
+    const orchestratorResult = {
+      snapshotId: 'snap-42',
+      capturedAt: '2026-06-15T12:00:00.000Z',
+      sources: ['github', 'localGit', 'sessions'],
+      errors: [],
+      partialData: false,
+      durationMs: 123,
+    }
+
+    mocks.mockCollect.mockResolvedValue(orchestratorResult)
+
+    const result = await runRefresh()
+
+    expect(result.success).toBe(true)
+    expect(result.partialData).toBe(false)
+    expect(result.sources).toEqual(['github', 'localGit', 'sessions'])
+    expect(result.errors).toEqual([])
+    expect(result.errorSummary).toBeNull()
+    expect(result.orchestratorResult).toEqual(orchestratorResult)
+    expect(result.skipped).toBe(false)
+  })
+
+  it('propagates partial data flag and errors from orchestrator result', async () => {
+    const orchestratorResult = {
+      snapshotId: 'snap-99',
+      capturedAt: '2026-06-15T14:00:00.000Z',
+      sources: ['github'],
+      errors: ['GitHub rate limited'],
+      partialData: true,
+      durationMs: 55,
+    }
+
+    mocks.mockCollect.mockResolvedValue(orchestratorResult)
+
+    const result = await runRefresh()
+
+    expect(result.success).toBe(false)
+    expect(result.partialData).toBe(true)
+    expect(result.errors).toEqual(['GitHub rate limited'])
+    expect(result.errorSummary).toBe('GitHub rate limited')
+    expect(result.orchestratorResult).toEqual(orchestratorResult)
+  })
 })

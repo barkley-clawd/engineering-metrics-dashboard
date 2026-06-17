@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildDashboardWindow } from '../dashboard-state'
+import { makeDailyMetricsRow } from './fixtures'
 
 function makeRow(day: string, overrides: Partial<import('../../../types/daily-metrics').DailyMetricsRow> = {}) {
   return {
@@ -293,5 +294,126 @@ describe('buildDashboardWindow', () => {
       status: 'empty',
       message: 'No per-day CI data in this window',
     })
+  })
+})
+
+describe('buildDashboardWindow — extended coverage', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('includes warning banners from source failures and marks cards unavailable', () => {
+    vi.stubEnv('GITHUB_TOKEN', 'tok')
+    vi.stubEnv('GITHUB_OWNER', 'o')
+    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
+    vi.stubEnv('GIT_REPOS', '/tmp/a')
+    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14', {
+        issuesOpened: 1,
+        issuesClosed: 1,
+        prsCreated: 1,
+        prsMerged: 1,
+        totalCommits: 2,
+        warnings: ['GitHub collector failed: rate limited'],
+      }),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.warnings).toContain('GitHub collector failed: rate limited')
+    expect(window.cards.throughput.status).toBe('partial')
+    expect(window.cards.throughput.message).toBe('Partial data - one or more throughput sources failed during the last refresh')
+    expect(window.cards.cycleTime.status).toBe('unavailable')
+    expect(window.cards.cycleTime.message).toBe('Cycle time unavailable - GitHub collector failed during the last refresh')
+    expect(window.cards.ci.status).toBe('unavailable')
+    expect(window.cards.ci.message).toBe('CI data unavailable - GitHub workflow runs could not be collected')
+    expect(window.cards.staleWork.status).toBe('unavailable')
+    expect(window.cards.staleWork.message).toBe('Stale work unavailable - GitHub collector failed during the last refresh')
+  })
+
+  it('reports empty session usage when configured but no aggregate present', () => {
+    vi.stubEnv('GITHUB_TOKEN', 'tok')
+    vi.stubEnv('GITHUB_OWNER', 'o')
+    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
+    vi.stubEnv('GIT_REPOS', '/tmp/a')
+    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14'),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.sessionUsage).not.toBeNull()
+    expect(window.sessionUsage!.status).toBe('empty')
+    expect(window.sessionUsage!.message).toBe('No session activity')
+    expect(window.cards.sessionUsage.status).toBe('empty')
+  })
+
+  it('reports unconfigured session when no session env var set', () => {
+    vi.stubEnv('GITHUB_TOKEN', 'tok')
+    vi.stubEnv('GITHUB_OWNER', 'o')
+    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
+    vi.stubEnv('GIT_REPOS', '/tmp/a')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14'),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.sessionUsage).not.toBeNull()
+    expect(window.sessionUsage!.status).toBe('unconfigured')
+    expect(window.cards.sessionUsage.status).toBe('unconfigured')
+  })
+
+  it('reports unconfigured sources when GitHub and local git are not configured', () => {
+    vi.stubEnv('SESSIONS_PERIOD_DAYS', '30')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14'),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.cards.throughput.status).toBe('unconfigured')
+    expect(window.cards.cycleTime.status).toBe('unconfigured')
+    expect(window.cards.ci.status).toBe('unconfigured')
+    expect(window.cards.staleWork.status).toBe('unconfigured')
+  })
+
+  it('shows stale work as no stale work when issues and PRs are current', () => {
+    vi.stubEnv('GITHUB_TOKEN', 'tok')
+    vi.stubEnv('GITHUB_OWNER', 'o')
+    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
+    vi.stubEnv('GIT_REPOS', '/tmp/a')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14', { staleIssues: 0, stalePrs: 0 }),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.cards.staleWork.message).toBe('No stale work')
+    expect(window.cards.staleWork.staleIssues).toBe(0)
+    expect(window.cards.staleWork.stalePrs).toBe(0)
+  })
+
+  it('summarises CI correctly when workflow run data is present across days', () => {
+    vi.stubEnv('GITHUB_TOKEN', 'tok')
+    vi.stubEnv('GITHUB_OWNER', 'o')
+    vi.stubEnv('SECRET_HOUSE_GITHUB_REPO', 'r')
+    vi.stubEnv('GIT_REPOS', '/tmp/a')
+
+    const window = buildDashboardWindow([
+      makeDailyMetricsRow('2026-06-14', {
+        ciTotalRuns: 10, ciPassCount: 8, ciFailCount: 2, ciPassRate: 0.8, ciAvgDurationMs: 1200,
+      }),
+      makeDailyMetricsRow('2026-06-13', {
+        ciTotalRuns: 5, ciPassCount: 4, ciFailCount: 1, ciPassRate: 0.8, ciAvgDurationMs: 800,
+      }),
+    ], new Date('2026-06-14T12:00:00Z'), false, null)
+
+    expect(window.cards.ci).toMatchObject({
+      totalRuns: 15,
+      passCount: 12,
+      failCount: 3,
+      passRate: 0.8,
+      sourceDays: 2,
+      status: 'available',
+    })
+    expect(window.cards.ci.averageDurationMs).toBeCloseTo(1066.67, 0)
   })
 })
