@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeDailyMetrics } from '../daily-metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
-import { makeIssue as makeIssueFixture, makePullRequest as makePullRequestFixture, makeWorkflowRun, makeSession, makeLocalRepo, makeSnapshot as makeSnapshotFixture } from './fixtures'
+import { makeIssue as makeIssueFixture, makePullRequest as makePullRequestFixture, makeWorkflowRun, makeSession, makeLocalRepo as makeLocalRepoFixture, makeSnapshot as makeSnapshotFixture } from './fixtures'
 
 function makeIssue(overrides: Partial<MetricSnapshot['issues'][number]> = {}): MetricSnapshot['issues'][number] {
   return {
