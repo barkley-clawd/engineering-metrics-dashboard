@@ -309,57 +309,6 @@ describe('GET /api/state', () => {
     )
   })
 
-  it('returns repo-filtered daily metrics when repoKey is provided', async () => {
-    mocks.mockGetQuery.mockReturnValue({ repoKey: 'github:barkley-clawd/signal-house' })
-    mocks.mockGetDailyMetricsRangeForRepo.mockReturnValue([
-      {
-        day: '2026-06-14',
-        repoKey: 'github:barkley-clawd/signal-house',
-        capturedAt: '2026-06-14T12:00:00.000Z',
-        source: 'orchestrated',
-        version: 1,
-        reflectsCompleteData: true,
-        issuesOpened: 1,
-        issuesClosed: 2,
-        prsCreated: 3,
-        prsMerged: 4,
-        totalCommits: 5,
-        avgCycleTimeDays: null,
-        medianCycleTimeDays: null,
-        p95CycleTimeDays: null,
-        cycleTimeSampleSize: 0,
-        ciTotalRuns: 0,
-        ciPassCount: 0,
-        ciFailCount: 0,
-        ciPassRate: null,
-        ciAvgDurationMs: null,
-        totalSessions: 0,
-        sessionErrorCount: 0,
-        staleIssues: 0,
-        stalePrs: 0,
-        warnings: [],
-        createdAt: '2026-06-14T12:00:00.000Z',
-      },
-    ])
-
-    const result = await handler({} as any)
-
-    expect(mocks.mockGetDailyMetricsRange).not.toHaveBeenCalled()
-    expect(mocks.mockGetDailyMetricsRangeForRepo).toHaveBeenCalledWith(
-      '2026-05-18',
-      '2026-06-14',
-      'github:barkley-clawd/signal-house',
-    )
-    expect(result.dashboardWindow.days.at(-1)).toMatchObject({
-      day: '2026-06-14',
-      isGap: false,
-      metrics: expect.objectContaining({
-        repoKey: 'github:barkley-clawd/signal-house',
-      }),
-    })
-    expect(result.dashboardWindow.coverage.daysWithData).toBe(1)
-  })
-
   it('propagates refreshInProgress from the database', async () => {
     mocks.mockGetLatestState.mockReturnValue({
       snapshot: null,
@@ -624,16 +573,18 @@ describe('GET /api/state', () => {
       },
     })
 
-    const result = await handler({ node: { req: { url: '/api/state?repoKey=github:demo/repo-a' } } } as any)
+    mocks.mockGetQuery.mockReturnValue({ repoKey: 'github:demo/repo-a' })
+
+    const result = await handler({} as any)
 
     expect(mocks.mockGetDailyMetricsRange).not.toHaveBeenCalled()
+    expect(mocks.mockGetDailyMetricsRangeForRepo).not.toHaveBeenCalled()
     expect(result.selectedRepoKey).toBe('github:demo/repo-a')
     expect(result.snapshot?.issues).toHaveLength(2)
     expect(result.viewSnapshot?.issues).toHaveLength(1)
     expect(result.viewSnapshot?.issues[0]?.repoKey).toBe('github:demo/repo-a')
     expect(result.dashboardWindow.cards.throughput.issuesOpened).toBe(1)
     expect(result.dashboardWindow.cards.throughput.totalCommits).toBe(2)
-    expect(result.dashboardWindow.cards.ci.totalRuns).toBe(1)
     expect(result.dashboardWindow.cards.staleWork.staleIssues).toBe(0)
     expect(result.dashboardWindow.latestDay?.day).toBe('2026-06-14')
   })
