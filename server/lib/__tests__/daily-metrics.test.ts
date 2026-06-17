@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeDailyMetrics } from '../daily-metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
+import { makeIssue as makeIssueFixture, makePullRequest as makePullRequestFixture, makeWorkflowRun, makeSession, makeLocalRepo, makeSnapshot as makeSnapshotFixture } from './fixtures'
 
 function makeIssue(overrides: Partial<MetricSnapshot['issues'][number]> = {}): MetricSnapshot['issues'][number] {
   return {
@@ -392,5 +393,160 @@ describe('computeDailyMetrics', () => {
 
     const rows = computeDailyMetrics(snapshot)
     expect(rows[0]!.day >= rows[rows.length - 1]!.day).toBe(true)
+  })
+
+  it('treats closed-unmerged PRs as created but NOT merged', () => {
+    const snapshot = makeSnapshot({
+      pullRequests: [
+        makePullRequest({
+          id: 'pr-closed-unmerged',
+          state: 'closed',
+          mergedAt: null,
+          closedAt: '2026-06-03T10:00:00Z',
+          createdAt: '2026-06-01T10:00:00Z',
+        }),
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+
+    const day1 = allRow(rows, '2026-06-01')
+    expect(day1).toBeDefined()
+    expect(day1!.prsCreated).toBe(1)
+    expect(day1!.prsMerged).toBe(0)
+
+    const day3 = allRow(rows, '2026-06-03')
+    expect(day3!.prsMerged).toBe(0)
+  })
+
+  it('counts merged PR as merged and open PR as created only', () => {
+    const snapshot = makeSnapshot({
+      pullRequests: [
+        makePullRequest({
+          id: 'pr-merged',
+          state: 'merged',
+          createdAt: '2026-06-01T10:00:00Z',
+          mergedAt: '2026-06-02T10:00:00Z',
+        }),
+        makePullRequest({
+          id: 'pr-open',
+          state: 'open',
+          createdAt: '2026-06-01T10:00:00Z',
+          mergedAt: null,
+        }),
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+
+    const day1 = allRow(rows, '2026-06-01')
+    expect(day1!.prsCreated).toBe(2)
+    expect(day1!.prsMerged).toBe(0)
+
+    const day2 = allRow(rows, '2026-06-02')
+    expect(day2!.prsMerged).toBe(1)
+  })
+
+  it('distributes workflow runs across multiple days for CI counts', () => {
+    const snapshot = makeSnapshot({
+      capturedAt: '2026-06-05T12:00:00Z',
+      workflowRuns: [
+        makeWorkflowRun({ id: 'w1', completedAt: '2026-06-01T10:00:00Z', conclusion: 'success' }),
+        makeWorkflowRun({ id: 'w2', completedAt: '2026-06-01T11:00:00Z', conclusion: 'failure' }),
+        makeWorkflowRun({ id: 'w3', completedAt: '2026-06-03T10:00:00Z', conclusion: 'success' }),
+        makeWorkflowRun({ id: 'w4', completedAt: '2026-06-03T11:00:00Z', conclusion: 'success' }),
+        makeWorkflowRun({ id: 'w5', completedAt: '2026-06-03T12:00:00Z', conclusion: 'success' }),
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+
+    expect(allRow(rows, '2026-06-01')!.ciTotalRuns).toBe(2)
+    expect(allRow(rows, '2026-06-01')!.ciPassCount).toBe(1)
+    expect(allRow(rows, '2026-06-01')!.ciFailCount).toBe(1)
+
+    expect(allRow(rows, '2026-06-03')!.ciTotalRuns).toBe(3)
+    expect(allRow(rows, '2026-06-03')!.ciPassCount).toBe(3)
+    expect(allRow(rows, '2026-06-03')!.ciFailCount).toBe(0)
+
+    expect(allRow(rows, '2026-06-02')!.ciTotalRuns).toBe(0)
+  })
+
+  it('handles a comprehensive snapshot with all data types across multiple days', () => {
+    const snapshot = makeSnapshot({
+      capturedAt: '2026-06-05T12:00:00Z',
+      issues: [
+        makeIssueFixture({ id: 'i1', createdAt: '2026-06-01T10:00:00Z' }),
+        makeIssueFixture({ id: 'i2', state: 'closed', createdAt: '2026-06-01T10:00:00Z', closedAt: '2026-06-03T10:00:00Z' }),
+        makeIssueFixture({ id: 'i3', createdAt: '2026-06-02T10:00:00Z' }),
+      ],
+      pullRequests: [
+        makePullRequestFixture({ id: 'pr1', createdAt: '2026-06-01T10:00:00Z', mergedAt: '2026-06-02T10:00:00Z' }),
+        makePullRequestFixture({ id: 'pr2', state: 'closed', createdAt: '2026-06-03T10:00:00Z', mergedAt: null, closedAt: '2026-06-04T10:00:00Z' }),
+      ],
+      workflowRuns: [
+        makeWorkflowRun({ id: 'w1', completedAt: '2026-06-01T10:00:00Z', conclusion: 'success' }),
+        makeWorkflowRun({ id: 'w2', completedAt: '2026-06-01T11:00:00Z', conclusion: 'failure' }),
+        makeWorkflowRun({ id: 'w3', completedAt: '2026-06-02T10:00:00Z', conclusion: 'success' }),
+      ],
+      sessions: [
+        makeSession({ id: 's1', timestamp: '2026-06-01T10:00:00Z', success: true }),
+        makeSession({ id: 's2', timestamp: '2026-06-01T11:00:00Z', success: false }),
+        makeSession({ id: 's3', timestamp: '2026-06-04T10:00:00Z', success: true }),
+      ],
+      localGit: [
+        makeLocalRepo({ repoKey: 'local:/a', recentCommits: 7, commitsByDay: { '2026-06-01': 3, '2026-06-04': 4 } }),
+      ],
+      aggregates: {
+        throughput: {
+          periodStart: '2026-06-01T00:00:00Z',
+          periodEnd: '2026-06-05T12:00:00Z',
+          issuesClosed: 0,
+          issuesOpened: 0,
+          prsMerged: 0,
+          prsCreated: 0,
+          totalCommits: 0,
+        },
+        cycleTime: null,
+        ci: null,
+        staleWork: {
+          asOf: '2026-06-05T12:00:00Z',
+          staleIssues: 2,
+          stalePRs: 1,
+          staleThresholdDays: 14,
+          oldestItemDays: null,
+        },
+        sessionUsage: null,
+        computedAt: '2026-06-05T12:00:00Z',
+      },
+    })
+
+    const rows = computeDailyMetrics(snapshot)
+
+    const jun1 = allRow(rows, '2026-06-01')!
+    expect(jun1.issuesOpened).toBe(2)
+    expect(jun1.prsCreated).toBe(1)
+    expect(jun1.ciTotalRuns).toBe(2)
+    expect(jun1.ciPassCount).toBe(1)
+    expect(jun1.ciFailCount).toBe(1)
+    expect(jun1.totalSessions).toBe(2)
+    expect(jun1.sessionErrorCount).toBe(1)
+    expect(jun1.totalCommits).toBe(3)
+    expect(jun1.staleIssues).toBe(2)
+    expect(jun1.stalePrs).toBe(1)
+
+    const jun2 = allRow(rows, '2026-06-02')!
+    expect(jun2.issuesOpened).toBe(1)
+    expect(jun2.prsMerged).toBe(1)
+    expect(jun2.ciTotalRuns).toBe(1)
+    expect(jun2.totalCommits).toBe(0)
+
+    const jun3 = allRow(rows, '2026-06-03')!
+    expect(jun3.issuesClosed).toBe(1)
+    expect(jun3.prsCreated).toBe(1)
+
+    const jun4 = allRow(rows, '2026-06-04')!
+    expect(jun4.totalSessions).toBe(1)
+    expect(jun4.totalCommits).toBe(4)
   })
 })

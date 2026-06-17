@@ -323,6 +323,327 @@ describe('GET /api/state', () => {
     expect(result.refreshInProgress).toBe(true)
   })
 
+  it('returns cached fallback state with stale dashboard when snapshot exists', async () => {
+    const state = {
+      snapshot: {
+        id: 'snap-cached',
+        capturedAt: '2026-06-10T12:00:00.000Z',
+        issues: [],
+        pullRequests: [],
+        workflowRuns: [],
+        repositories: [],
+        sessions: [],
+        localGit: [],
+        errors: [],
+        aggregates: {
+          throughput: { periodStart: '2026-05-14T00:00:00Z', periodEnd: '2026-06-10T12:00:00Z', issuesClosed: 0, issuesOpened: 0, prsMerged: 0, prsCreated: 0, totalCommits: 0 },
+          cycleTime: null,
+          ci: null,
+          staleWork: { asOf: '2026-06-10T12:00:00Z', staleIssues: 0, stalePRs: 0, staleThresholdDays: 14, oldestItemDays: null },
+          sessionUsage: null,
+          computedAt: '2026-06-10T12:00:00Z',
+        },
+        metadata: { source: 'orchestrated', refreshDurationMs: 100, partialData: false, errors: [] },
+      },
+      lastRefreshAt: '2026-06-10T12:00:00.000Z',
+      lastSuccessfulRefreshAt: '2026-06-10T12:00:00.000Z',
+      refreshInProgress: false,
+      isStale: true,
+      dashboardWindow: null,
+      diagnostics: {
+        configuredProjectRoots: [],
+        discoveredRepos: [],
+        skippedPaths: [],
+        parsedGitHubRemotes: [],
+        collectionTargets: [],
+        cacheAgeSeconds: 3600,
+        pollerEnabled: false,
+        pollerIntervalSeconds: 300,
+        lastSuccessfulRefreshAt: '2026-06-10T12:00:00.000Z',
+        lastError: null,
+        sourceHealth: {},
+      },
+    }
+
+    mocks.mockGetLatestState.mockReturnValue(state)
+    mocks.mockGetDailyMetricsRange.mockReturnValue([
+      {
+        day: '2026-06-10',
+        repoKey: 'all',
+        capturedAt: '2026-06-10T12:00:00.000Z',
+        source: 'orchestrated',
+        version: 1,
+        reflectsCompleteData: true,
+        issuesOpened: 2,
+        issuesClosed: 1,
+        prsCreated: 1,
+        prsMerged: 0,
+        totalCommits: 3,
+        avgCycleTimeDays: null,
+        medianCycleTimeDays: null,
+        p95CycleTimeDays: null,
+        cycleTimeSampleSize: 0,
+        ciTotalRuns: 0,
+        ciPassCount: 0,
+        ciFailCount: 0,
+        ciPassRate: null,
+        ciAvgDurationMs: null,
+        totalSessions: 0,
+        sessionErrorCount: 0,
+        staleIssues: 0,
+        stalePrs: 0,
+        warnings: [],
+        createdAt: '2026-06-10T12:00:00.000Z',
+      },
+    ])
+
+    const result = await handler({} as any)
+
+    expect(result.isStale).toBe(true)
+    expect(result.dashboardWindow).not.toBeNull()
+    expect(result.dashboardWindow!.endDay).toBe('2026-06-14')
+    expect(result.dashboardWindow!.cards.throughput.issuesOpened).toBe(2)
+    expect(result.dashboardWindow!.cards.throughput.totalCommits).toBe(3)
+    expect(result.dashboardWindow!.cards.throughput.status).toBe('stale')
+  })
+
+  it('propagates partial source failure warnings through the dashboard window', async () => {
+    const state = {
+      snapshot: {
+        id: 'snap-partial',
+        capturedAt: '2026-06-14T12:00:00.000Z',
+        aggregates: {
+          sessionUsage: {
+            periodStart: '2026-05-18T00:00:00Z',
+            periodEnd: '2026-06-14T12:00:00Z',
+            totalSessions: 5,
+            startedSessions: 2,
+            completedSessions: 2,
+            erroredSessions: 0,
+            stuckSessions: 0,
+            lastActivityAt: '2026-06-14T11:30:00Z',
+            messages: 10,
+            activeDays: 1,
+            totalCost: 2.5,
+            averageCostPerDay: 2.5,
+            averageTokensPerSession: 100,
+            medianTokensPerSession: 80,
+            inputTokens: 60,
+            outputTokens: 30,
+            cacheReadTokens: 5,
+            cacheWriteTokens: 10,
+            uniqueTools: ['edit'],
+            toolUsage: [{ toolName: 'edit', count: 5, percentage: 100 }],
+            topActions: [{ action: 'edit', count: 5 }],
+            errorCount: 0,
+          },
+        },
+      },
+      lastRefreshAt: '2026-06-14T12:00:00.000Z',
+      lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+      refreshInProgress: false,
+      isStale: false,
+      dashboardWindow: null,
+      diagnostics: {
+        configuredProjectRoots: [],
+        discoveredRepos: [],
+        skippedPaths: [],
+        parsedGitHubRemotes: [],
+        collectionTargets: [],
+        cacheAgeSeconds: 0,
+        pollerEnabled: false,
+        pollerIntervalSeconds: 300,
+        lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+        lastError: null,
+        sourceHealth: {},
+      },
+    }
+
+    const rows = [
+      {
+        day: '2026-06-14',
+        repoKey: 'all',
+        capturedAt: '2026-06-14T12:00:00.000Z',
+        source: 'orchestrated',
+        version: 1,
+        reflectsCompleteData: false,
+        issuesOpened: 1,
+        issuesClosed: 0,
+        prsCreated: 0,
+        prsMerged: 0,
+        totalCommits: 5,
+        avgCycleTimeDays: null,
+        medianCycleTimeDays: null,
+        p95CycleTimeDays: null,
+        cycleTimeSampleSize: 0,
+        ciTotalRuns: 0,
+        ciPassCount: 0,
+        ciFailCount: 0,
+        ciPassRate: null,
+        ciAvgDurationMs: null,
+        totalSessions: 5,
+        sessionErrorCount: 0,
+        staleIssues: 0,
+        stalePrs: 0,
+        warnings: ['GitHub API rate limited during collection', 'Local git unavailable: path not found'],
+        createdAt: '2026-06-14T12:00:00.000Z',
+      },
+    ]
+
+    mocks.mockGetLatestState.mockReturnValue(state)
+    mocks.mockGetDailyMetricsRange.mockReturnValue(rows)
+
+    const result = await handler({} as any)
+
+    expect(result.dashboardWindow.warnings).toEqual(
+      expect.arrayContaining([
+        'GitHub API rate limited during collection',
+        'Local git unavailable: path not found',
+      ]),
+    )
+    expect(result.dashboardWindow.cards.throughput.status).toBe('partial')
+  })
+
+  it('includes diagnostics sourceHealth in the response', async () => {
+    const diagnostics = {
+      configuredProjectRoots: ['/workspace'],
+      discoveredRepos: [],
+      skippedPaths: [],
+      parsedGitHubRemotes: [],
+      collectionTargets: ['github', 'localGit'],
+      cacheAgeSeconds: 0,
+      pollerEnabled: true,
+      pollerIntervalSeconds: 300,
+      lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+      lastError: null,
+      sourceHealth: {
+        github: { status: 'healthy', message: null },
+        localGit: { status: 'healthy', message: null },
+      },
+    }
+
+    mocks.mockGetLatestState.mockReturnValue({
+      snapshot: null,
+      lastRefreshAt: null,
+      lastSuccessfulRefreshAt: null,
+      refreshInProgress: false,
+      isStale: true,
+      dashboardWindow: null,
+      diagnostics,
+    })
+
+    const result = await handler({} as any)
+
+    expect(result.diagnostics).toEqual(diagnostics)
+    expect(result.diagnostics.sourceHealth.github).toEqual({ status: 'healthy', message: null })
+    expect(result.diagnostics.sourceHealth.localGit).toEqual({ status: 'healthy', message: null })
+  })
+
+  it('includes session usage in the dashboard window when snapshot has it', async () => {
+    const state = {
+      snapshot: {
+        id: 'snap-3',
+        capturedAt: '2026-06-14T12:00:00.000Z',
+        aggregates: {
+          sessionUsage: {
+            periodStart: '2026-05-18T00:00:00Z',
+            periodEnd: '2026-06-14T12:00:00Z',
+            totalSessions: 25,
+            startedSessions: 10,
+            completedSessions: 9,
+            erroredSessions: 1,
+            stuckSessions: 0,
+            lastActivityAt: '2026-06-14T11:30:00Z',
+            messages: 50,
+            activeDays: 4,
+            totalCost: 12.5,
+            averageCostPerDay: 3.125,
+            averageTokensPerSession: 100,
+            medianTokensPerSession: 80,
+            inputTokens: 60,
+            outputTokens: 30,
+            cacheReadTokens: 5,
+            cacheWriteTokens: 10,
+            uniqueTools: ['edit', 'search'],
+            toolUsage: [
+              { toolName: 'edit', count: 15, percentage: 60 },
+              { toolName: 'search', count: 10, percentage: 40 },
+            ],
+            topActions: [
+              { action: 'edit', count: 15 },
+              { action: 'search', count: 10 },
+            ],
+            errorCount: 1,
+          },
+        },
+      },
+      lastRefreshAt: '2026-06-14T12:00:00.000Z',
+      lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+      refreshInProgress: false,
+      isStale: false,
+      dashboardWindow: null,
+      diagnostics: {
+        configuredProjectRoots: [],
+        discoveredRepos: [],
+        skippedPaths: [],
+        parsedGitHubRemotes: [],
+        collectionTargets: [],
+        cacheAgeSeconds: 0,
+        pollerEnabled: false,
+        pollerIntervalSeconds: 300,
+        lastSuccessfulRefreshAt: '2026-06-14T12:00:00.000Z',
+        lastError: null,
+        sourceHealth: {},
+      },
+    }
+
+    mocks.mockGetLatestState.mockReturnValue(state)
+    mocks.mockGetDailyMetricsRange.mockReturnValue([
+      {
+        day: '2026-06-14',
+        repoKey: 'all',
+        capturedAt: '2026-06-14T12:00:00.000Z',
+        source: 'orchestrated',
+        version: 1,
+        reflectsCompleteData: true,
+        issuesOpened: 0,
+        issuesClosed: 0,
+        prsCreated: 0,
+        prsMerged: 0,
+        totalCommits: 0,
+        avgCycleTimeDays: null,
+        medianCycleTimeDays: null,
+        p95CycleTimeDays: null,
+        cycleTimeSampleSize: 0,
+        ciTotalRuns: 0,
+        ciPassCount: 0,
+        ciFailCount: 0,
+        ciPassRate: null,
+        ciAvgDurationMs: null,
+        totalSessions: 25,
+        sessionErrorCount: 1,
+        staleIssues: 0,
+        stalePrs: 0,
+        warnings: [],
+        createdAt: '2026-06-14T12:00:00.000Z',
+      },
+    ])
+
+    const result = await handler({} as any)
+
+    expect(result.dashboardWindow.sessionUsage).toMatchObject({
+      totalSessions: 25,
+      messages: 50,
+      activeDays: 4,
+      status: 'available',
+    })
+    expect(result.dashboardWindow.cards.sessionUsage).toMatchObject({
+      totalSessions: 25,
+      sessionErrorCount: 1,
+      status: 'available',
+    })
+  })
+
   it('filters the dashboard view to a selected repo', async () => {
     const snapshot = {
       id: 'snap-2',
