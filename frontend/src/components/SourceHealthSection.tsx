@@ -26,6 +26,10 @@ const STORAGE_KEY = "sh-diagnostics-open";
 
 type DashboardDiagnostics = SourceDiagnostics | null;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function loadExpanded(): boolean {
   if (typeof window === "undefined") return false;
   return window.sessionStorage.getItem(STORAGE_KEY) === "true";
@@ -67,18 +71,22 @@ function getBadgeClasses(status: SourceHealth["status"]) {
 }
 
 function isEmptyDiagnostics(diagnostics: DashboardDiagnostics) {
-  return !diagnostics || Object.keys(diagnostics.sourceHealth).length === 0;
+  return !diagnostics || Object.keys(diagnostics.sourceHealth ?? {}).length === 0;
 }
 
 export function SourceHealthSection() {
   const dashboardDiagnostics = useDashboardStore((state) => state.diagnostics);
   const dataDiagnostics = useDashboardStore((state) => {
-    const data = state.data as { diagnostics?: SourceDiagnostics } | null;
-    return data?.diagnostics ?? null;
+    const data = state.data;
+    if (!isRecord(data)) return null;
+    const diagnostics = data.diagnostics;
+    return isRecord(diagnostics) ? (diagnostics as unknown as SourceDiagnostics) : null;
   });
   const refreshState = useDashboardStore((state) => {
-    const data = state.data as { refreshState?: RefreshStateSummary } | null;
-    return data?.refreshState ?? null;
+    const data = state.data;
+    if (!isRecord(data)) return null;
+    const value = data.refreshState;
+    return isRecord(value) ? (value as unknown as RefreshStateSummary) : null;
   });
   const loadDiagnostics = useDashboardStore((state) => state.loadDiagnostics);
   const diagnosticsLoading = useDashboardStore((state) => state.diagnosticsLoading);
