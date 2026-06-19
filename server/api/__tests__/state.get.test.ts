@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   mockGetDailyMetricsRange: vi.fn(),
   mockGetDailyMetricsRangeForRepo: vi.fn(),
   mockGetNormalizedSnapshotForRepo: vi.fn(),
-  mockGetLatestOpenCodeDailyUsageModelUsage: vi.fn(),
 }))
 
 vi.mock('h3', () => ({
@@ -23,7 +22,6 @@ vi.mock('../../db/client', () => ({
   getDailyMetricsRange: mocks.mockGetDailyMetricsRange,
   getDailyMetricsRangeForRepo: mocks.mockGetDailyMetricsRangeForRepo,
   getNormalizedSnapshotForRepo: mocks.mockGetNormalizedSnapshotForRepo,
-  getLatestOpenCodeDailyUsageModelUsage: mocks.mockGetLatestOpenCodeDailyUsageModelUsage,
 }))
 
 import handler from '../state.get'
@@ -63,7 +61,6 @@ describe('GET /api/state', () => {
     mocks.mockGetDailyMetricsRange.mockReturnValue([])
     mocks.mockGetDailyMetricsRangeForRepo.mockReturnValue([])
     mocks.mockGetNormalizedSnapshotForRepo.mockReturnValue(null)
-    mocks.mockGetLatestOpenCodeDailyUsageModelUsage.mockReturnValue(null)
   })
 
   afterEach(() => {
