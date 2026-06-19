@@ -1,6 +1,7 @@
 import type { MetricSnapshot } from '../../types/snapshot'
 import type { DailyMetricsInsert } from '../../types/daily-metrics'
-import type { CycleTimeAggregate, CIAggregate } from '../../types/aggregates'
+import type { CIAggregate } from '../../types/aggregates'
+import type { PullRequestMetric } from '../../types/metrics'
 
 function toDayKey(isoString: string): string {
   return isoString.slice(0, 10)
@@ -118,6 +119,48 @@ function pushRow(
   rows.push(params)
 }
 
+function computeTrailingCycleTime(
+  day: string,
+  prs: PullRequestMetric[],
+  windowDays: number = 14,
+): { avgCycleTimeDays: number | null; medianCycleTimeDays: number | null; p95CycleTimeDays: number | null; cycleTimeSampleSize: number } {
+  const windowStart = new Date(day + 'T00:00:00Z')
+  windowStart.setUTCDate(windowStart.getUTCDate() - windowDays)
+  const windowEnd = new Date(day + 'T23:59:59.999Z')
+
+  const mergedPrs = prs.filter(pr => {
+    if (!pr.mergedAt) return false
+    const mergedAt = new Date(pr.mergedAt)
+    return mergedAt >= windowStart && mergedAt <= windowEnd
+  })
+
+  if (mergedPrs.length < 3) {
+    return { avgCycleTimeDays: null, medianCycleTimeDays: null, p95CycleTimeDays: null, cycleTimeSampleSize: 0 }
+  }
+
+  const cycles = mergedPrs.map(pr => {
+    const createdAt = new Date(pr.createdAt)
+    const mergedAt = new Date(pr.mergedAt!)
+    return (mergedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
+  }).sort((a, b) => a - b)
+
+  const avg = cycles.reduce((s, c) => s + c, 0) / cycles.length
+  return {
+    avgCycleTimeDays: avg,
+    medianCycleTimeDays: percentile(cycles, 50),
+    p95CycleTimeDays: percentile(cycles, 95),
+    cycleTimeSampleSize: cycles.length,
+  }
+}
+
+function percentile(sorted: readonly number[], p: number): number {
+  const index = (p / 100) * (sorted.length - 1)
+  const lower = Math.floor(index)
+  const upper = Math.ceil(index)
+  if (lower === upper) return sorted[lower]!
+  return sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (index - lower)
+}
+
 export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInsert[] {
   const capturedAt = snapshot.capturedAt
   const capturedDay = toDayKey(capturedAt)
@@ -152,7 +195,6 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
 
   allDays.add(capturedDay)
 
-  const cycleTime = snapshot.aggregates.cycleTime as CycleTimeAggregate | null
   const ci = snapshot.aggregates.ci as CIAggregate | null
   const staleWork = snapshot.aggregates.staleWork
   const hasCiRows = ciCompletedByDay.size > 0
@@ -166,6 +208,8 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
     const ciPass = ciPassByDay.get(day) || 0
     const ciFail = ciFailByDay.get(day) || 0
 
+    const ct = computeTrailingCycleTime(day, snapshot.pullRequests, 14)
+
     pushRow(inserts, {
       day,
       repoKey: 'all',
@@ -177,10 +221,10 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
       prsCreated: prsCreatedByDay.get(day) || 0,
       prsMerged: prsMergedByDay.get(day) || 0,
       totalCommits: commitsByDay.size > 0 ? (commitsByDay.get(day) || 0) : totalCommits,
-      avgCycleTimeDays: cycleTime?.averageDays ?? null,
-      medianCycleTimeDays: cycleTime?.medianDays ?? null,
-      p95CycleTimeDays: cycleTime?.p95Days ?? null,
-      cycleTimeSampleSize: cycleTime?.sampleSize ?? 0,
+      avgCycleTimeDays: ct.avgCycleTimeDays,
+      medianCycleTimeDays: ct.medianCycleTimeDays,
+      p95CycleTimeDays: ct.p95CycleTimeDays,
+      cycleTimeSampleSize: ct.cycleTimeSampleSize,
       ciTotalRuns: ciTotal,
       ciPassCount: ciPass,
       ciFailCount: ciFail,
@@ -219,8 +263,10 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
       }
     }
 
+    const repoPrs = snapshot.pullRequests.filter(item => item.repoKey === repoKey)
     for (const day of Array.from(repoDays).sort().reverse()) {
       if (!allDays.has(day)) continue
+      const repoCt = computeTrailingCycleTime(day, repoPrs, 14)
       pushRow(inserts, {
         day,
         repoKey,
@@ -232,10 +278,10 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
         prsCreated: snapshot.pullRequests.filter(item => item.repoKey === repoKey && toDayKey(item.createdAt) === day).length,
         prsMerged: snapshot.pullRequests.filter(item => item.repoKey === repoKey && item.mergedAt != null && toDayKey(item.mergedAt) === day).length,
         totalCommits: snapshot.localGit.filter(item => item.repoKey === repoKey).reduce((sum, repo) => sum + (repo.commitsByDay?.[day] ?? 0), 0),
-        avgCycleTimeDays: null,
-        medianCycleTimeDays: null,
-        p95CycleTimeDays: null,
-        cycleTimeSampleSize: 0,
+        avgCycleTimeDays: repoCt.avgCycleTimeDays,
+        medianCycleTimeDays: repoCt.medianCycleTimeDays,
+        p95CycleTimeDays: repoCt.p95CycleTimeDays,
+        cycleTimeSampleSize: repoCt.cycleTimeSampleSize,
         ciTotalRuns: 0,
         ciPassCount: 0,
         ciFailCount: 0,

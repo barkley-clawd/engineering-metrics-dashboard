@@ -216,27 +216,59 @@ describe('computeDailyMetrics', () => {
     expect(allRow(rows, '2026-06-04')!.totalSessions).toBe(0)
   })
 
-  it('includes cycle time and CI fields from aggregates', () => {
+  it('computes trailing 14-day rolling cycle time per day from merged PRs', () => {
     const snapshot = makeSnapshot({
-      aggregates: {
-        throughput: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T12:00:00Z', issuesClosed: 5, issuesOpened: 10, prsMerged: 3, prsCreated: 4, totalCommits: 50 },
-        cycleTime: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T12:00:00Z', averageDays: 2.5, medianDays: 1.8, p95Days: 6.0, sampleSize: 20 },
-        ci: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T12:00:00Z', totalRuns: 100, passCount: 80, failCount: 20, passRate: 0.8, averageDurationMs: 5000 },
-        staleWork: { asOf: '2026-06-05T12:00:00Z', staleIssues: 3, stalePRs: 2, staleThresholdDays: 14, oldestItemDays: 30 },
-        sessionUsage: null,
-        computedAt: '2026-06-05T12:00:00Z',
-      },
+      capturedAt: '2026-06-10T12:00:00Z',
+      pullRequests: [
+        makePullRequest({ id: 'pr1', createdAt: '2026-05-10T10:00:00Z', mergedAt: '2026-05-20T10:00:00Z' }),
+        makePullRequest({ id: 'pr2', createdAt: '2026-05-15T10:00:00Z', mergedAt: '2026-05-25T10:00:00Z' }),
+        makePullRequest({ id: 'pr3', createdAt: '2026-05-20T10:00:00Z', mergedAt: '2026-06-01T10:00:00Z' }),
+        makePullRequest({ id: 'pr4', createdAt: '2026-05-25T10:00:00Z', mergedAt: '2026-06-05T10:00:00Z' }),
+        makePullRequest({ id: 'pr5', createdAt: '2026-06-01T10:00:00Z', mergedAt: '2026-06-08T10:00:00Z' }),
+      ],
     })
 
     const rows = computeDailyMetrics(snapshot)
     expect(rows.length).toBeGreaterThan(0)
+
+    const day1 = allRow(rows, '2026-06-01')!
+    // Window [2026-05-18, 2026-06-01] -> PR1(10d), PR2(10d), PR3(12d) = 3 PRs
+    expect(day1.cycleTimeSampleSize).toBe(3)
+    expect(day1.avgCycleTimeDays).toBeCloseTo(10.667, 3)
+    expect(day1.medianCycleTimeDays).toBe(10)
+    expect(day1.p95CycleTimeDays).toBeCloseTo(11.8, 3)
+
+    const day5 = allRow(rows, '2026-06-05')!
+    // Window [2026-05-22, 2026-06-05] -> PR2(10d), PR3(12d), PR4(11d) = 3 PRs
+    expect(day5.cycleTimeSampleSize).toBe(3)
+    expect(day5.avgCycleTimeDays).toBe(11)
+    expect(day5.medianCycleTimeDays).toBe(11)
+    // p95: sorted[10,11,12]; index=0.95*2=1.9 => 11+(12-11)*0.9=11.9
+    expect(day5.p95CycleTimeDays).toBeCloseTo(11.9, 3)
+
+    const day10 = allRow(rows, '2026-06-10')!
+    // Window [2026-05-27, 2026-06-10] -> PR3(12d), PR4(11d), PR5(7d) = 3 PRs
+    expect(day10.cycleTimeSampleSize).toBe(3)
+    expect(day10.avgCycleTimeDays).toBe(10)
+    expect(day10.medianCycleTimeDays).toBe(11)
+    // p95: sorted[7,11,12]; index=0.95*2=1.9 => 11+(12-11)*0.9=11.9
+    expect(day10.p95CycleTimeDays).toBeCloseTo(11.9, 3)
+  })
+
+  it('returns null cycle time when fewer than 3 merged PRs in trailing window', () => {
+    const snapshot = makeSnapshot({
+      capturedAt: '2026-06-05T12:00:00Z',
+      pullRequests: [
+        makePullRequest({ id: 'pr1', createdAt: '2026-06-01T10:00:00Z', mergedAt: '2026-06-02T10:00:00Z' }),
+      ],
+    })
+
+    const rows = computeDailyMetrics(snapshot)
     for (const row of rows) {
-      expect(row.avgCycleTimeDays).toBe(2.5)
-      expect(row.medianCycleTimeDays).toBe(1.8)
-      expect(row.p95CycleTimeDays).toBe(6.0)
-      expect(row.cycleTimeSampleSize).toBe(20)
-      expect(row.staleIssues).toBe(3)
-      expect(row.stalePrs).toBe(2)
+      expect(row.cycleTimeSampleSize).toBe(0)
+      expect(row.avgCycleTimeDays).toBeNull()
+      expect(row.medianCycleTimeDays).toBeNull()
+      expect(row.p95CycleTimeDays).toBeNull()
     }
   })
 
