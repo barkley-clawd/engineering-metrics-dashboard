@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
-import * as echarts from "echarts";
 import { useDashboardStore } from "@/store/dashboard";
+import { HealthSignalCard } from "@/components/HealthSignalCard";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -94,56 +94,6 @@ function loadFilter<T extends string>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   const value = window.sessionStorage.getItem(key);
   return value === null ? fallback : (value as T);
-}
-
-function TestChart() {
-  const chartRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-
-    const chart = echarts.init(chartRef.current, "dark");
-
-    chart.setOption({
-      backgroundColor: "transparent",
-      title: { text: "Sample Activity", textStyle: { color: "#f1f5f9" } },
-      tooltip: { trigger: "axis" },
-      xAxis: {
-        type: "category",
-        data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        axisLine: { lineStyle: { color: "#262a33" } },
-        axisLabel: { color: "#94a3b8" },
-      },
-      yAxis: {
-        type: "value",
-        axisLine: { lineStyle: { color: "#262a33" } },
-        axisLabel: { color: "#94a3b8" },
-        splitLine: { lineStyle: { color: "#1e2128" } },
-      },
-      series: [
-        {
-          data: [120, 200, 150, 80, 70, 110, 130],
-          type: "bar",
-          itemStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "#38bdf8" },
-              { offset: 1, color: "rgba(56, 189, 248, 0.2)" },
-            ]),
-          },
-        },
-      ],
-    });
-
-    const handleResize = () => chart.resize();
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.dispose();
-    };
-  }, []);
-
-  return <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Bar chart showing sample activity over the past week" />;
 }
 
 export default function Home() {
@@ -238,6 +188,14 @@ export default function Home() {
           </h1>
           <p className="mt-2 text-text-secondary">Developer activity dashboard scaffold</p>
         </header>
+
+        <section aria-label="Headline health summary" className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <HealthSignalCard label="Throughput" value="48" unit="items" trend="up" status="healthy" detail="12 commits in window" />
+          <HealthSignalCard label="Cycle Time" value="2.1" unit="d" trend="down" status="warning" detail="P95: 4.8d · 18 items" />
+          <HealthSignalCard label="CI Health" value="94" unit="%" trend="up" status="healthy" detail="3 failures in 48 runs" />
+          <HealthSignalCard label="Stale Work" value="7" unit="items" trend="up" status="critical" detail="5 issues · 2 PRs" />
+          <HealthSignalCard label="Overall Health" value="Fair" trend="neutral" status="warning" detail="3/4 signals healthy" />
+        </section>
       </nav>
 
       <StatusStrip />
@@ -380,7 +338,7 @@ export default function Home() {
               onRetry={() => fetch()}
               minHeight="180px"
             >
-              <TestChart />
+              <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-divider text-sm text-text-secondary">Headline summary cards now sit above the main dashboard</div>
             </SectionState>
           </CardContent>
         </Card>
