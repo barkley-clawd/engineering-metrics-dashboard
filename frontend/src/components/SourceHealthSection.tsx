@@ -17,6 +17,10 @@ import { SectionState, useSectionState } from "@/components/section-state";
 import type { SourceDiagnostics } from "@/types";
 
 type SourceHealth = SourceDiagnostics["sourceHealth"][string];
+type RefreshStateSummary = {
+  durationMs?: number | null;
+  sourceHealth?: Record<string, SourceHealth>;
+} | null;
 
 const STORAGE_KEY = "sh-diagnostics-open";
 
@@ -28,6 +32,7 @@ function loadExpanded(): boolean {
 }
 
 function saveExpanded(open: boolean) {
+  if (typeof window === "undefined") return;
   window.sessionStorage.setItem(STORAGE_KEY, String(open));
 }
 
@@ -36,6 +41,12 @@ function formatSeconds(seconds: number | null): string {
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
   return `${Math.round(seconds / 3600)}h`;
+}
+
+function formatDurationMs(durationMs: number | null | undefined): string {
+  if (durationMs == null) return "—";
+  if (durationMs < 1000) return `${durationMs}ms`;
+  return `${(durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0)}s`;
 }
 
 const healthDot: Record<SourceHealth["status"], string> = {
@@ -65,6 +76,10 @@ export function SourceHealthSection() {
     const data = state.data as { diagnostics?: SourceDiagnostics } | null;
     return data?.diagnostics ?? null;
   });
+  const refreshState = useDashboardStore((state) => {
+    const data = state.data as { refreshState?: RefreshStateSummary } | null;
+    return data?.refreshState ?? null;
+  });
   const loadDiagnostics = useDashboardStore((state) => state.loadDiagnostics);
   const diagnosticsLoading = useDashboardStore((state) => state.diagnosticsLoading);
   const diagnosticsError = useDashboardStore((state) => state.diagnosticsError);
@@ -89,14 +104,13 @@ export function SourceHealthSection() {
     error: expanded ? diagnosticsError : null,
     isEmpty: diagnosticsHasLoaded && isEmptyDiagnostics(diagnostics),
   });
+  const healthySourceCount = sourceEntries.filter(([, health]) => health.status === "healthy").length;
+  const totalSourceCount = sourceEntries.length;
 
   function toggle() {
     const next = !expanded;
     setExpanded(next);
     saveExpanded(next);
-    if (next && !diagnosticsHasLoaded && !diagnosticsLoading) {
-      void loadDiagnostics();
-    }
   }
 
   return (
@@ -127,7 +141,7 @@ export function SourceHealthSection() {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Source health summary">
+        <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Source health summary">
           {sourceEntries.length > 0 ? (
             sourceEntries.map(([name, health]) => (
               <button
@@ -177,24 +191,31 @@ export function SourceHealthSection() {
                         {sourceEntries.map(([name, health]) => (
                           <div
                             key={name}
-                            className="flex items-center gap-2 rounded-lg border border-card-border bg-card-bg px-3 py-2"
+                            className="rounded-lg border border-card-border bg-card-bg px-3 py-2"
                           >
-                            <span
-                              className={cn(
-                                "h-2 w-2 shrink-0 rounded-full",
-                                healthDot[health.status] ?? healthDot.unknown,
-                              )}
-                              aria-hidden="true"
-                            />
-                            <span className="min-w-0 truncate text-sm text-text-primary">
-                              {name}
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className="ml-auto shrink-0 border-divider text-text-muted"
-                            >
-                              {health.status}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "h-2 w-2 shrink-0 rounded-full",
+                                  healthDot[health.status] ?? healthDot.unknown,
+                                )}
+                                aria-hidden="true"
+                              />
+                              <span className="min-w-0 truncate text-sm text-text-primary">
+                                {name}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="ml-auto shrink-0 border-divider text-text-muted"
+                              >
+                                {health.status}
+                              </Badge>
+                            </div>
+                            {health.message ? (
+                              <p className="mt-1 line-clamp-2 text-xs text-text-muted">
+                                {health.message}
+                              </p>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -269,6 +290,18 @@ export function SourceHealthSection() {
                             </span>
                           </div>
                         ) : null}
+                        <div className="flex justify-between gap-3">
+                          <span className="text-text-muted">Duration</span>
+                          <span className="text-text-primary">
+                            {formatDurationMs(refreshState?.durationMs ?? null)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-text-muted">Sources</span>
+                          <span className="text-text-primary">
+                            {healthySourceCount}/{totalSourceCount} healthy
+                          </span>
+                        </div>
                       </div>
                       {diagnostics.lastError ? (
                         <p className="rounded bg-status-error/5 px-2 py-1 text-xs text-status-error">

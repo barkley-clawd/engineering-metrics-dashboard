@@ -61,6 +61,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const data = await fetchState(repo);
       const stateData = data as Record<string, unknown>;
       const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
+      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
       set({
         data,
         isLoading: false,
@@ -72,8 +73,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           (stateData.lastSuccessfulRefreshAt as string) ?? new Date().toISOString(),
         refreshStatus: "success",
         error: null,
-        diagnostics,
-        diagnosticsHasLoaded: Boolean(diagnostics),
+        diagnostics: nextDiagnostics,
+        diagnosticsHasLoaded: Boolean(nextDiagnostics),
       });
     } catch (err) {
       set({
@@ -109,6 +110,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const data = await fetchState(state.selectedRepoKey);
       const stateData = data as Record<string, unknown>;
       const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
+      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
       set({
         data,
         isLoading: false,
@@ -120,8 +122,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         refreshStatus: "success",
         manualRefreshStatus: "success",
         error: null,
-        diagnostics,
-        diagnosticsHasLoaded: Boolean(diagnostics),
+        diagnostics: nextDiagnostics,
+        diagnosticsHasLoaded: Boolean(nextDiagnostics),
       });
     } catch (err) {
       set({
@@ -143,6 +145,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const data = await fetchState(state.selectedRepoKey);
       const stateData = data as Record<string, unknown>;
       const diagnostics = (stateData.diagnostics as SourceDiagnostics | undefined) ?? null;
+      const nextDiagnostics = state.diagnosticsHasLoaded ? state.diagnostics : diagnostics;
       const apiLastRefreshAt = (stateData.lastSuccessfulRefreshAt as string) ?? null;
 
       if (apiLastRefreshAt && apiLastRefreshAt !== state.lastPollTimestamp) {
@@ -154,8 +157,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           refreshStatus: "success",
           hasEverLoaded: true,
           error: null,
-          diagnostics,
-          diagnosticsHasLoaded: Boolean(diagnostics),
+          diagnostics: nextDiagnostics,
+          diagnosticsHasLoaded: Boolean(nextDiagnostics),
         });
       } else {
         set({
