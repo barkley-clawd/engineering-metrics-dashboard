@@ -5,6 +5,7 @@ vi.mock('../../../db/client', () => ({
   initDb: vi.fn().mockResolvedValue(undefined),
   persistSnapshot: vi.fn(),
   getLatestSnapshot: vi.fn().mockReturnValue(null),
+  upsertOpenCodeDailyUsage: vi.fn(),
 }))
 
 vi.mock('../../github/collector', () => ({
@@ -19,6 +20,20 @@ vi.mock('../../git/collector', () => ({
 
 vi.mock('../../sessions/collector', () => ({
   createSessionCollector: vi.fn(),
+}))
+
+vi.mock('../../opencode-daily/collector', () => ({
+  collectDailyOpenCodeUsage: vi.fn().mockReturnValue({
+    date: '2026-06-19',
+    source: 'opencode',
+    totalSessions: 0,
+    totalMessages: 0,
+    totalTokens: 0,
+    totalCost: null,
+    rawJson: null,
+    collectedAt: '2026-06-19T12:00:00.000Z',
+    errors: [],
+  }),
 }))
 
 import { createCollector as mockGhCreate } from '../../github/collector'
@@ -37,7 +52,7 @@ describe('createOrchestrator', () => {
 
     expect(result.snapshotId).toBeTruthy()
     expect(result.capturedAt).toBeTruthy()
-    expect(result.sources).toEqual([])
+    expect(result.sources).toEqual(['opencodeDaily'])
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
     expect(db.persistSnapshot).toHaveBeenCalledTimes(1)
@@ -161,6 +176,7 @@ describe('createOrchestrator', () => {
     expect(result.sources).toContain('github')
     expect(result.sources).toContain('localGit')
     expect(result.sources).toContain('sessions')
+    expect(result.sources).toContain('opencodeDaily')
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
 
@@ -453,7 +469,10 @@ describe('createOrchestrator', () => {
 
     const result = await orchestrator.collect()
 
-    expect(result.sources).toEqual(['sessions'])
+    expect(result.sources).toContain('sessions')
+    expect(result.sources).toContain('opencodeDaily')
+    expect(result.sources).not.toContain('github')
+    expect(result.sources).not.toContain('localGit')
     expect(result.errors).toHaveLength(0)
     expect(result.partialData).toBe(false)
 
@@ -531,6 +550,7 @@ describe('createOrchestrator', () => {
 
     expect(result.sources).toContain('localGit')
     expect(result.sources).toContain('sessions')
+    expect(result.sources).toContain('opencodeDaily')
     expect(result.errors).toHaveLength(0)
 
     const snapshotArg = vi.mocked(db.persistSnapshot).mock.calls[0]![0] as import('../../../../types/snapshot').MetricSnapshot

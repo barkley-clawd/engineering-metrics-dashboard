@@ -1,8 +1,9 @@
 import { createCollector as createGitHubCollector, collectWithConcurrency } from '../github/collector'
 import { createLocalGitCollector } from '../git/collector'
 import { createSessionCollector } from '../sessions/collector'
+import { collectDailyOpenCodeUsage } from '../opencode-daily/collector'
 import { deriveAll } from '../github/aggregates'
-import { initDb, persistSnapshot, getLatestSnapshot } from '../../db/client'
+import { initDb, persistSnapshot, getLatestSnapshot, upsertOpenCodeDailyUsage } from '../../db/client'
 import { randomUUID } from 'node:crypto'
 import { getRuntimeConfig } from '../runtime-config'
 import type { GitHubCollectorConfig } from '../github/types'
@@ -162,6 +163,28 @@ export function createOrchestrator(config: OrchestratorConfig) {
         } catch (err) {
           allErrors.push(`Session collector failed: ${err instanceof Error ? err.message : String(err)}`)
         }
+      }
+
+      // 4. Daily OpenCode usage collector (--days 1)
+      sources.push('opencodeDaily')
+      try {
+        const dailyResult = collectDailyOpenCodeUsage()
+        if (dailyResult.errors.length > 0) {
+          allErrors.push(...dailyResult.errors)
+        } else {
+          upsertOpenCodeDailyUsage({
+            date: dailyResult.date,
+            source: dailyResult.source,
+            totalSessions: dailyResult.totalSessions,
+            totalMessages: dailyResult.totalMessages,
+            totalTokens: dailyResult.totalTokens,
+            totalCost: dailyResult.totalCost,
+            rawJson: dailyResult.rawJson,
+            collectedAt: dailyResult.collectedAt,
+          })
+        }
+      } catch (err) {
+        allErrors.push(`Daily OpenCode collector failed: ${err instanceof Error ? err.message : String(err)}`)
       }
 
       if (config.github && config.github.length > 0) {

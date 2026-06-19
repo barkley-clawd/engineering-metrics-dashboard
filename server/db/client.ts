@@ -7,6 +7,7 @@ import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig } from 
 import type { MetricSnapshot, SnapshotRow, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
+import type { OpenCodeDailyUsageInsert, OpenCodeDailyUsageRow } from '../../types/opencode-daily'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
 import { computeDailyMetrics } from '../lib/daily-metrics'
 
@@ -155,6 +156,7 @@ function migrate(db: Db): void {
   const runMigrations = db.transaction(() => {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
+    db.exec(SQL.createOpenCodeDailyUsageTable)
     const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
     const current = row ? Number(row.value) : 0
     if (current >= SCHEMA_VERSION) return
@@ -163,6 +165,7 @@ function migrate(db: Db): void {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
     db.exec(SQL.createDailyMetricsV3)
+    db.exec(SQL.createOpenCodeDailyUsageTable)
     db.exec(`
       ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
       CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
@@ -431,6 +434,47 @@ export function getLatestDailyDayForRepo(repoKey: string): string | null {
   const db = getDb()
   const row = db.prepare(`SELECT day FROM daily_metrics WHERE repo_key = ? ORDER BY day DESC LIMIT 1;`).get(repoKey) as { day?: unknown } | undefined
   return row ? String(row.day) : null
+}
+
+function rowToOpenCodeDailyUsage(row: Record<string, unknown>): OpenCodeDailyUsageRow {
+  return {
+    date: String(row.date),
+    source: String(row.source),
+    totalSessions: Number(row.total_sessions),
+    totalMessages: Number(row.total_messages),
+    totalTokens: Number(row.total_tokens),
+    totalCost: row.total_cost != null ? Number(row.total_cost) : null,
+    rawJson: row.raw_json != null ? String(row.raw_json) : null,
+    collectedAt: String(row.collected_at),
+  }
+}
+
+export function upsertOpenCodeDailyUsage(row: OpenCodeDailyUsageInsert): void {
+  const db = getDb()
+  db.prepare(SQL.upsertOpenCodeDailyUsage).run({
+    date: row.date,
+    source: row.source,
+    totalSessions: row.totalSessions,
+    totalMessages: row.totalMessages,
+    totalTokens: row.totalTokens,
+    totalCost: row.totalCost,
+    rawJson: row.rawJson,
+    collectedAt: row.collectedAt,
+  })
+}
+
+export function getOpenCodeDailyUsages(fromDate?: string, toDate?: string): OpenCodeDailyUsageRow[] {
+  const db = getDb()
+  const stmt = db.prepare(SQL.getOpenCodeDailyUsages)
+  const rows = stmt.all({ fromDate: fromDate ?? null, toDate: toDate ?? null }) as Record<string, unknown>[]
+  return rows.map(rowToOpenCodeDailyUsage)
+}
+
+export function getLatestOpenCodeDailyUsage(): OpenCodeDailyUsageRow | null {
+  const db = getDb()
+  const row = db.prepare(SQL.getLatestOpenCodeDailyUsage).get() as Record<string, unknown> | undefined
+  if (!row) return null
+  return rowToOpenCodeDailyUsage(row)
 }
 
 // ── Normalized source data write helpers ──────────────────────────
