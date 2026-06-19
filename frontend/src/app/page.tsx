@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { RefreshCw } from "lucide-react";
 import * as echarts from "echarts";
 import { useDashboardStore } from "@/store/dashboard";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { SectionState, useSectionState } from "@/components/section-state";
+import { StatusStrip } from "@/components/StatusStrip";
 
 type TypeFilter = "issues" | "prs" | "all";
 type ConditionFilter = "stale" | "blocked" | "failing" | "all";
@@ -144,15 +147,28 @@ function TestChart() {
 }
 
 export default function Home() {
-  const { data, isLoading, error, selectedRepoKey, fetch } =
-    useDashboardStore();
+  const {
+    data,
+    isLoading,
+    isRefreshing,
+    error,
+    selectedRepoKey,
+    hasEverLoaded,
+    manualRefreshStatus,
+    fetch,
+    manualRefresh,
+    triggerAutoRefresh,
+  } = useDashboardStore();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(() => loadFilter("sh-queue-type", "all"));
   const [conditionFilter, setConditionFilter] = useState<ConditionFilter>(() => loadFilter("sh-queue-cond", "all"));
   const [sortMode, setSortMode] = useState<SortMode>(() => loadFilter("sh-queue-sort", "urgent"));
+  const [errorDismissed, setErrorDismissed] = useState(false);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    if (!hasEverLoaded && !isLoading) {
+      fetch();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     window.sessionStorage.setItem("sh-queue-type", typeFilter);
@@ -166,10 +182,25 @@ export default function Home() {
     window.sessionStorage.setItem("sh-queue-sort", sortMode);
   }, [sortMode]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      triggerAutoRefresh();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [triggerAutoRefresh]);
+
+  useEffect(() => {
+    if (manualRefreshStatus === "failed") {
+      setErrorDismissed(false);
+      const timer = setTimeout(() => setErrorDismissed(true), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [manualRefreshStatus]);
+
   const repoState = useSectionState({
-    isLoading,
+    isLoading: !hasEverLoaded && isLoading,
     error,
-    isEmpty: !data,
+    isEmpty: !data && hasEverLoaded,
   });
 
   const filteredItems = useMemo(() => {
@@ -189,10 +220,13 @@ export default function Home() {
   const isFiltered = typeFilter !== "all" || conditionFilter !== "all" || sortMode !== "urgent";
 
   const attentionState = useSectionState({
-    isLoading,
+    isLoading: !hasEverLoaded && isLoading,
     error,
     isEmpty: filteredItems.length === 0 && !isFiltered,
   });
+
+  const isRefreshingNow = isLoading || manualRefreshStatus === "running";
+  const showErrorBanner = manualRefreshStatus === "failed" && !errorDismissed;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -206,7 +240,36 @@ export default function Home() {
         <p className="mt-2 text-text-secondary">Developer activity dashboard scaffold</p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <StatusStrip />
+
+      <AnimatePresence>
+        {showErrorBanner && (
+          <motion.div
+            key="error-banner"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="mt-2 overflow-hidden rounded-lg border border-status-error/30"
+            style={{ backgroundColor: "rgba(248, 113, 113, 0.08)" }}
+          >
+            <div className="flex items-center justify-between px-4 py-2 text-sm">
+              <span style={{ color: "var(--color-status-error)" }}>
+                {error ?? "Refresh failed"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setErrorDismissed(true)}
+                className="text-xs"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-text-primary">
@@ -238,7 +301,7 @@ export default function Home() {
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Poller</span>
-              <Badge variant="outline" className="border-divider text-text-muted">Disabled</Badge>
+              <Badge variant="outline" className="border-divider text-text-muted">Enabled</Badge>
             </div>
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
@@ -258,10 +321,11 @@ export default function Home() {
               variant="default"
               size="sm"
               className="w-full bg-accent-primary hover:bg-accent-primary/80"
-              onClick={() => fetch()}
-              disabled={isLoading}
+              onClick={() => manualRefresh()}
+              disabled={isRefreshingNow}
             >
-              {isLoading ? "Refreshing..." : "Refresh"}
+              {isRefreshingNow && <RefreshCw className="size-3.5 animate-spin" />}
+              {isRefreshingNow ? "Refreshing..." : "Refresh"}
             </Button>
             <Button
               variant="outline"
