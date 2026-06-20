@@ -19,6 +19,8 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { SectionState, useSectionState } from "@/components/section-state";
 import { StatusStrip } from "@/components/StatusStrip";
+import { ModelUsageRankList } from "@/components/ModelUsageRankList";
+import type { DashboardWindowSessionUsageSummary } from "@/types";
 
 const SourceHealthSection = dynamic(
   () =>
@@ -190,6 +192,19 @@ export default function Home() {
     isLoading: !hasEverLoaded && isLoading,
     error,
     isEmpty: filteredItems.length === 0 && !isFiltered,
+  });
+
+  const sessionUsage = useMemo<DashboardWindowSessionUsageSummary | null>(() => {
+    const raw = (data as Record<string, unknown> | null)?.dashboardWindow as
+      | Record<string, unknown>
+      | undefined;
+    return (raw?.sessionUsage as DashboardWindowSessionUsageSummary) ?? null;
+  }, [data]);
+
+  const modelUsageState = useSectionState({
+    isLoading: !hasEverLoaded && isLoading,
+    error,
+    isEmpty: false,
   });
 
   const isRefreshingNow = isLoading || manualRefreshStatus === "running";
@@ -472,6 +487,28 @@ export default function Home() {
                   ))
                 )}
               </div>
+            </SectionState>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label="Ranked model usage" className="mt-6">
+        <Card className="border-card-border bg-card-bg">
+          <CardHeader>
+            <CardTitle className="text-text-primary">Model Usage</CardTitle>
+            <CardDescription>
+              Ranked by cost and token volume
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              state={modelUsageState}
+              section="model-usage"
+              errorMessage={error ?? undefined}
+              onRetry={() => fetch()}
+              minHeight="160px"
+            >
+              <ModelUsageRankList sessionUsage={sessionUsage} />
             </SectionState>
           </CardContent>
         </Card>

@@ -3,6 +3,7 @@ export type {
   DashboardWindow,
   DashboardWindowCards,
   DashboardWindowCoverage,
+  DashboardWindowSessionUsageSummary,
   MetricSnapshot,
   SourceDiagnostics,
 } from "../../../types";
