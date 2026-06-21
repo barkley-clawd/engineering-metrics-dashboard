@@ -1,5 +1,4 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals'
-import * as db from '../../../db/client'
 import { createCollector } from '../collector'
 
 function mockOkJson(body: unknown): Response {
@@ -74,10 +73,6 @@ const mockWorkflows = { workflows: [{ id: 1, name: 'CI Pipeline' }] }
 
 beforeEach(async () => {
   jest.restoreAllMocks()
-  jest.spyOn(db, 'initDb').mockResolvedValue(undefined as never)
-  jest.spyOn(db, 'insertSnapshot').mockImplementation(() => {})
-  jest.spyOn(db, 'insertAggregate').mockImplementation(() => {})
-  jest.spyOn(db, 'getLatestSnapshot').mockReturnValue(null)
 })
 
 describe('createCollector', () => {
@@ -145,7 +140,6 @@ describe('createCollector', () => {
       owner: 'test',
       repo: 'repo',
       token: 'ghp_test',
-      skipPersist: true,
     })
 
     const result = await collector.collect()

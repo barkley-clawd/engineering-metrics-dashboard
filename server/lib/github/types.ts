@@ -5,7 +5,6 @@ export interface GitHubCollectorConfig {
   baseUrl?: string
   staleThresholdDays?: number
   lookbackDays?: number
-  skipPersist?: boolean
 }
 
 export interface GHIssueRaw {
