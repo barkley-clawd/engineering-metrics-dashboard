@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import logo from "../../../assets/signal-house-logo.png";
 import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
@@ -544,7 +543,7 @@ export default function Home() {
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden">
               <Image
-                src={logo}
+                src="/signal-house-logo.png"
                 alt="Signal House logo"
                 fill
                 priority

@@ -101,6 +101,10 @@ function parseSectionRows(lines: string[], heading: string): string[] {
   return rows
 }
 
+function isLikelyModelName(name: string): boolean {
+  return /^(?:[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)$/i.test(name)
+}
+
 function parseSessionList(output: string): string[] {
   return output
     .split('\n')
@@ -257,7 +261,7 @@ export function createSessionCollector(config: SessionCollectorConfig = {}) {
               const modelMatch = row.match(/│\s+(.+?)\s+│\s*$/)
               if (!modelMatch) continue
               const modelName = modelMatch[1]!.trim()
-              if (!modelName || modelName === 'Messages') continue
+              if (!isLikelyModelName(modelName)) continue
               const block = modelRows.slice(i + 1, i + 7).join('\n')
               const messagesMatch = block.match(/Messages\s+([\d,]+)/)
               if (!messagesMatch) continue
