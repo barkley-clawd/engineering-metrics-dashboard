@@ -76,6 +76,29 @@ export function createApiClient(opts: PAClientOptions) {
     return allItems
   }
 
+  async function paginateCollection<T>(path: string, key: string): Promise<T[]> {
+    const allItems: T[] = []
+    let page = 1
+    let hasMore = true
+
+    while (hasMore) {
+      const pagePath = `${path}${path.includes('?') ? '&' : '?'}per_page=${DEFAULT_PER_PAGE}&page=${page}`
+      const { data, headers } = await request<Record<string, T[]>>(pagePath)
+      const items = data[key]
+      if (Array.isArray(items)) {
+        allItems.push(...items)
+      }
+      const link = headers.get('Link')
+      if (!link || !link.includes('rel="next"')) {
+        hasMore = false
+      } else {
+        page++
+      }
+    }
+
+    return allItems
+  }
+
   async function fetchWorkflows(): Promise<Map<number, string>> {
     const workflows = new Map<number, string>()
     try {
@@ -183,10 +206,9 @@ export function createApiClient(opts: PAClientOptions) {
 
     async fetchWorkflowRuns(): Promise<WorkflowRunMetric[]> {
       const workflowNames = await fetchWorkflows()
-      const raw = await paginate<GHWorkflowRunRaw>('/actions/runs?status=all&per_page=100')
-      const runs: WorkflowRunMetric[] = []
-      for (const item of raw) {
-        runs.push({
+      const runs = await paginateCollection<GHWorkflowRunRaw>('/actions/runs?status=all', 'workflow_runs')
+      return runs.map((item) => {
+        return {
           id: String(item.id),
           name: item.name,
           status: item.status,
@@ -197,11 +219,10 @@ export function createApiClient(opts: PAClientOptions) {
           repoKey,
           branch: item.head_branch,
           headSha: item.head_sha ?? null,
-          workflowName: workflowNames.get(item.workflow_id) ?? `Workflow ${item.workflow_id}`,
+          workflowName: workflowNames.get(item.workflow_id) ?? ('Workflow ' + item.workflow_id),
           url: item.html_url,
-        })
-      }
-      return runs
+        }
+      })
     },
 
     async fetchRepository(): Promise<RepositoryMetric> {

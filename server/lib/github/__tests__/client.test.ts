@@ -231,7 +231,7 @@ describe('createApiClient', () => {
       callCount++
       const body = callCount === 1
         ? { workflows: [{ id: 1, name: 'CI Pipeline' }] }
-        : [
+        : { workflow_runs: [
             {
               id: 100, name: 'test', status: 'completed', conclusion: 'success',
               created_at: '2025-01-06T00:00:00Z', updated_at: '2025-01-06T01:00:00Z',
@@ -246,7 +246,7 @@ describe('createApiClient', () => {
               head_sha: 'def456',
               event: 'pull_request', workflow_id: 1,
             },
-          ]
+          ] }
       return Promise.resolve(new Response(JSON.stringify(body), {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
@@ -274,7 +274,7 @@ describe('createApiClient', () => {
       callCount++
       const body = callCount === 1
         ? { workflows: [] }
-        : [
+        : { workflow_runs: [
             {
               id: 200, name: 'test', status: 'in_progress', conclusion: null,
               created_at: '2025-01-06T00:00:00Z', updated_at: '2025-01-06T01:00:00Z',
@@ -282,7 +282,7 @@ describe('createApiClient', () => {
               head_sha: 'abc123',
               event: 'push', workflow_id: 99,
             },
-          ]
+          ] }
       return Promise.resolve(new Response(JSON.stringify(body), {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
@@ -302,7 +302,7 @@ describe('createApiClient', () => {
     const fetchSpy = jest.spyOn(globalThis, 'fetch')
     fetchSpy
       .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([
+      .mockResolvedValueOnce(new Response(JSON.stringify({ workflow_runs: [
         {
           id: 300, name: 'test', status: 'completed', conclusion: 'success',
           created_at: '2025-01-06T00:00:00Z', updated_at: '2025-01-06T01:00:00Z',
@@ -310,7 +310,7 @@ describe('createApiClient', () => {
           head_sha: 'abc123',
           event: 'push', workflow_id: 42,
         },
-      ]), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
+      ] }), { status: 200, headers: new Headers({ 'content-type': 'application/json' }) }))
 
     const client = createApiClient({ token: 'tok', baseUrl: 'https://api.github.com/repos/test/repo' })
     const runs = await client.fetchWorkflowRuns()
