@@ -7,7 +7,7 @@ import { rankModelUsage } from "@/lib/rank-models";
 import type { RankedModelEntry } from "@/lib/rank-models";
 import { UsageBar } from "@/components/UsageBar";
 import { cn } from "@/lib/utils";
-import { averageCostPerMessage, hasDetailData, totalTokens } from "./model-usage-utils";
+import { averageCostPerMessage, hasDetailData, totalTokens as sumEntryTokens } from "./model-usage-utils";
 import type { DashboardWindowSessionUsageSummary } from "@/types";
 
 function formatNumber(value: number | null | undefined): string {
@@ -35,15 +35,15 @@ function ModelRow({
   entry,
   expanded,
   maxMessages,
-  maxTokens,
-  maxCost,
+  totalTokenShare,
+  totalCost,
   onToggle,
 }: {
   entry: RankedModelEntry;
   expanded: boolean;
   maxMessages: number;
-  maxTokens: number;
-  maxCost: number;
+  totalTokenShare: number;
+  totalCost: number;
   onToggle: () => void;
 }) {
   return (
@@ -116,7 +116,7 @@ function ModelRow({
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-[0.06em] text-text-muted">Total</span>
-                    <span className="text-xs font-mono tabular-nums text-text-secondary">{formatNumber(totalTokens(entry as any))}</span>
+                    <span className="text-xs font-mono tabular-nums text-text-secondary">{formatNumber(sumEntryTokens(entry as any))}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-[0.06em] text-text-muted">Cost</span>
@@ -129,16 +129,16 @@ function ModelRow({
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.06em] text-text-muted">
                     <span>Token share</span>
-                    <span>{Math.round((maxTokens > 0 && totalTokens(entry as any) != null ? (totalTokens(entry as any)! / maxTokens) : 0) * 100)}%</span>
+                    <span>{Math.round((totalTokenShare > 0 && sumEntryTokens(entry as any) != null ? (sumEntryTokens(entry as any)! / totalTokenShare) : 0) * 100)}%</span>
                   </div>
-                  <UsageBar value={totalTokens(entry as any) ?? 0} max={maxTokens} size="md" color="bg-chart-1" label={`${entry.modelName}: token share`} animated={false} />
+                  <UsageBar value={sumEntryTokens(entry as any) ?? 0} max={totalTokenShare} size="md" color="bg-chart-1" label={`${entry.modelName}: token share`} animated={false} />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.06em] text-text-muted">
                     <span>Cost share</span>
-                    <span>{Math.round((maxCost > 0 && entry.cost != null ? entry.cost / maxCost : 0) * 100)}%</span>
+                    <span>{Math.round((totalCost > 0 && entry.cost != null ? entry.cost / totalCost : 0) * 100)}%</span>
                   </div>
-                  <UsageBar value={entry.cost ?? 0} max={maxCost} size="md" color="bg-chart-2" label={`${entry.modelName}: cost share`} animated={false} />
+                  <UsageBar value={entry.cost ?? 0} max={totalCost} size="md" color="bg-chart-2" label={`${entry.modelName}: cost share`} animated={false} />
                 </div>
                 <p className="text-[10px] text-text-muted">
                   Avg cost / message: {formatCurrency(averageCostPerMessage(entry))}
@@ -200,8 +200,8 @@ export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
     () => (ranked.length > 0 ? Math.max(...ranked.map((e) => e.messages)) : 0),
     [ranked],
   );
-  const maxTokens = useMemo(() => Math.max(0, ...ranked.map((e) => totalTokens(e) ?? 0)), [ranked]);
-  const maxCost = useMemo(() => Math.max(0, ...ranked.map((e) => e.cost ?? 0)), [ranked]);
+  const totalTokenShare = useMemo(() => ranked.reduce((sum, e) => sum + (sumEntryTokens(e) ?? 0), 0), [ranked]);
+  const totalCost = useMemo(() => ranked.reduce((sum, e) => sum + (e.cost ?? 0), 0), [ranked]);
 
   const allExpanded = expandAllMode;
 
@@ -223,7 +223,7 @@ export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
         <span className="text-text-muted">
           Tokens{" "}
           <span className="font-semibold text-text-primary tabular-nums">
-            {formatNumber(totalTokens(sessionUsage!))}
+            {formatNumber(sumEntryTokens(sessionUsage!))}
           </span>
         </span>
         <span className="text-text-muted">
@@ -260,8 +260,8 @@ export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
             entry={entry}
             expanded={expanded.has(entry.modelName)}
             maxMessages={maxMessages}
-            maxTokens={maxTokens}
-            maxCost={maxCost}
+            totalTokenShare={totalTokenShare}
+            totalCost={totalCost}
             onToggle={() => toggle(entry.modelName)}
           />
         ))}
