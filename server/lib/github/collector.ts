@@ -1,11 +1,9 @@
 import { createApiClient, type GitHubApiClient } from './client'
 import { deriveAll } from './aggregates'
 import { TtlCache } from '../../cache/index'
-import { initDb, insertSnapshot, insertAggregate, getLatestSnapshot } from '../../db/client'
 import type { GitHubCollectorConfig, CollectorResult, CollectorProgress } from './types'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryMetric, ErrorMetric } from '../../../types/metrics'
 import type { MetricSnapshot } from '../../../types/snapshot'
-import type { AggregateType } from '../../../types/aggregates'
 import { randomUUID } from 'node:crypto'
 
 type ProgressCallback = (progress: CollectorProgress) => void
@@ -219,37 +217,6 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         },
       }
 
-      if (!config.skipPersist) {
-        emit('caching', 'Persisting snapshot to local cache...')
-        try {
-          await initDb()
-          insertSnapshot(snapshot)
-
-          const aggTypes: Array<{ type: AggregateType; data: unknown }> = [
-            { type: 'throughput', data: aggregates.throughput },
-            { type: 'cycleTime', data: aggregates.cycleTime },
-            { type: 'ci', data: aggregates.ci },
-            { type: 'staleWork', data: aggregates.staleWork },
-          ]
-
-          for (const { type, data } of aggTypes) {
-            if (data !== null) {
-              insertAggregate(
-                `${type}-${capturedAt}`,
-                type,
-                aggregates.throughput.periodStart,
-                aggregates.throughput.periodEnd,
-                data,
-                snapshotId,
-              )
-            }
-          }
-        } catch (err) {
-          const msg = `Failed to cache snapshot: ${err instanceof Error ? err.message : String(err)}`
-          allErrors.push(msg)
-        }
-      }
-
       emit('done', 'Collection complete.')
 
       return {
@@ -261,7 +228,7 @@ export function createCollector(config: GitHubCollectorConfig, onProgress?: Prog
         errors: allErrors,
         partialData,
         durationMs: Math.max(1, Date.now() - startTime),
-        ...(config.skipPersist ? { snapshot } : {}),
+        snapshot,
       }
     },
   }

@@ -109,10 +109,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
         sources.push('github')
         try {
           const ghResults = await collectWithConcurrency(config.github, runtimeConfig.orchestrator.collectConcurrency, async ghConfig => {
-            const ghCollector = createGitHubCollector({
-              ...ghConfig,
-              skipPersist: true,
-            })
+            const ghCollector = createGitHubCollector(ghConfig)
             return await ghCollector.collect()
           })
           for (const ghResult of ghResults) {
