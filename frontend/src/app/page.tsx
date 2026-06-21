@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
+import logo from "../../../assets/signal-house-logo.png";
 import { AnimatePresence, motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
@@ -539,13 +541,27 @@ export default function Home() {
     <main id="main-content" className="container mx-auto max-w-6xl px-4 py-8">
       <nav aria-label="Dashboard controls">
         <header className="mb-8">
-          <h1
-            className="text-3xl font-bold tracking-tight text-text-primary"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Signal House
-          </h1>
-          <p className="mt-2 text-base text-text-secondary font-body">Developer activity dashboard scaffold</p>
+          <div className="flex items-center gap-4">
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden">
+              <Image
+                src={logo}
+                alt="Signal House logo"
+                fill
+                priority
+                sizes="64px"
+                className="object-contain"
+              />
+            </div>
+            <div>
+              <h1
+                className="text-3xl font-bold tracking-tight text-text-primary"
+                style={{ fontFamily: "var(--font-heading)" }}
+              >
+                Signal House
+              </h1>
+              <p className="mt-2 text-base text-text-secondary font-body">Developer activity dashboard scaffold</p>
+            </div>
+          </div>
         </header>
 
         <section aria-label="Headline health summary" className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -949,8 +965,15 @@ export default function Home() {
         <SourceHealthSection />
       </section>
 
-      <footer className="mt-8 text-center text-sm text-text-muted">
-        <p>Scaffold complete. Tailwind v4 + shadcn/ui + ECharts + Zustand</p>
+      <footer className="mt-10 border-t border-divider/70 pt-6 text-center">
+        <a
+          href="https://github.com/barkley-clawd/signal-house"
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-text-muted transition-colors hover:text-text-primary"
+        >
+          Signal House is built for real signal, not dashboard noise.
+        </a>
       </footer>
     </main>
   );
