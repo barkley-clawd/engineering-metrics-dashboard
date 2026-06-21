@@ -17,10 +17,14 @@ export type Db = Database.Database
 let _db: Db | null = null
 
 function getDbDir(): string {
-  return process.env['DB_DIR'] || join(process.cwd(), '.data')
+  if (process.env['DB_DIR']) return process.env['DB_DIR']
+  const cwd = process.cwd()
+  const lastSegment = cwd.split(/[\\/]/).filter(Boolean).pop() ?? ''
+  const baseDir = lastSegment === 'frontend' ? join(cwd, '..') : cwd
+  return join(baseDir, '.data')
 }
 
-function getDbPath(): string {
+export function getDbPath(): string {
   return join(getDbDir(), 'metrics.db')
 }
 

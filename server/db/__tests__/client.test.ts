@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
 import { mkdtempSync, rmSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { initDb, getLatestState, close, setRefreshRunState, getRefreshRunState, getLatestSnapshot, insertSnapshot } from '../client'
+import { initDb, getLatestState, close, setRefreshRunState, getRefreshRunState, getLatestSnapshot, insertSnapshot, getDbPath } from '../client'
 
 let tmpDir: string
 
@@ -177,5 +177,44 @@ describe('initDb on fresh database', () => {
     const count = reopened.prepare('SELECT COUNT(*) as count FROM snapshots').get() as { count: number }
     expect(count.count).toBe(0)
     reopened.close()
+  })
+})
+
+describe('getDbPath resolution (issue #179)', () => {
+  const originalDbDir = process.env['DB_DIR']
+  let cwdSpy: ReturnType<typeof jest.spyOn>
+
+  beforeEach(() => {
+    delete process.env['DB_DIR']
+    cwdSpy = jest.spyOn(process, 'cwd')
+  })
+
+  afterEach(() => {
+    cwdSpy.mockRestore()
+    if (originalDbDir === undefined) {
+      delete process.env['DB_DIR']
+    } else {
+      process.env['DB_DIR'] = originalDbDir
+    }
+  })
+
+  it('honors DB_DIR when set', () => {
+    process.env['DB_DIR'] = '/custom/db/root'
+    expect(getDbPath()).toBe(join('/custom/db/root', 'metrics.db'))
+  })
+
+  it('resolves to <cwd>/.data/metrics.db when cwd is the repository root', () => {
+    cwdSpy.mockReturnValue('/home/agent/repo')
+    expect(getDbPath()).toBe(join('/home/agent/repo', '.data', 'metrics.db'))
+  })
+
+  it('falls back to <cwd>/../.data/metrics.db when running from frontend/', () => {
+    cwdSpy.mockReturnValue('/home/agent/repo/frontend')
+    expect(getDbPath()).toBe(join('/home/agent/repo/frontend', '..', '.data', 'metrics.db'))
+  })
+
+  it('does not fall back when cwd merely contains a frontend subdirectory', () => {
+    cwdSpy.mockReturnValue('/home/agent/repo/frontend-staging')
+    expect(getDbPath()).toBe(join('/home/agent/repo/frontend-staging', '.data', 'metrics.db'))
   })
 })
