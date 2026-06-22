@@ -76,7 +76,7 @@ describe('runtime config', () => {
       },
       orchestrator: {
         collectConcurrency: 3,
-        githubLookbackDays: 30,
+        githubLookbackDays: 28,
         staleThresholdDays: 14,
       },
       sessions: {
@@ -116,7 +116,7 @@ describe('runtime config', () => {
     expect(getStaleThresholdMs()).toBe(900000)
     expect(getOrchestratorDefaults()).toMatchObject({
       collectConcurrency: 3,
-      githubLookbackDays: 30,
+      githubLookbackDays: 28,
       staleThresholdDays: 14,
     })
     expect(getDiscoveryMaxDepth()).toBe(3)

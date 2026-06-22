@@ -267,7 +267,7 @@ export function computeDailyMetrics(snapshot: MetricSnapshot): DailyMetricsInser
     const repoRuns = snapshot.workflowRuns.filter(item => item.repoKey === repoKey)
     for (const day of Array.from(repoDays).sort().reverse()) {
       if (!allDays.has(day)) continue
-      const repoCt = computeTrailingCycleTime(day, repoPrs, 14)
+      const repoCt = computeTrailingCycleTime(day, repoPrs, 28)
       const repoCiTotal = repoRuns.filter(run => run.completedAt != null && toDayKey(run.completedAt) === day).length
       const repoCiPass = repoRuns.filter(run => run.completedAt != null && toDayKey(run.completedAt) === day && run.conclusion === 'success').length
       const repoCiFail = repoRuns.filter(run => {
