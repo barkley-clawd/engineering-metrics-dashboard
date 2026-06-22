@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { useDashboardStore } from "@/store/dashboard";
 
-function formatTimeAgo(dateStr: string | null, now: number): string {
+export function formatTimeAgo(dateStr: string | null, now: number): string {
   if (!dateStr) return "never";
   const diff = now - new Date(dateStr).getTime();
   const seconds = Math.floor(diff / 1000);

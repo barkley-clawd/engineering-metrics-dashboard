@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { SectionState, useSectionState } from "@/components/section-state";
-import { StatusStrip } from "@/components/StatusStrip";
+import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { TrendCard } from "@/components/TrendCard";
 import type {
@@ -435,6 +435,7 @@ export default function Home() {
   const [conditionFilter, setConditionFilter] = useState<ConditionFilter>(() => loadFilter("sh-queue-cond", "all"));
   const [sortMode, setSortMode] = useState<SortMode>(() => loadFilter("sh-queue-sort", "urgent"));
   const [now, setNow] = useState(Date.now);
+  const [staleBannerDismissed, setStaleBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (!hasEverLoaded && !isLoading) {
@@ -683,6 +684,34 @@ export default function Home() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {data?.isStale && !staleBannerDismissed && (
+          <motion.div
+            key="stale-banner"
+            role="alert"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="mt-2 overflow-hidden rounded-lg border border-status-warning/30"
+            style={{ backgroundColor: "rgba(250, 204, 21, 0.08)" }}
+          >
+            <div className="flex items-center justify-between px-4 py-2 text-sm">
+              <span style={{ color: "var(--color-status-warning)" }}>
+                {data.staleReason ?? "Dashboard data may be stale — last successful refresh was more than 2 minutes ago"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setStaleBannerDismissed(true)}
+                className="text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1.5 py-0.5"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <section aria-label="Repository and status" className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
           <CardHeader>
@@ -720,7 +749,12 @@ export default function Home() {
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Last refresh</span>
-              <span className="text-sm text-text-muted">Never</span>
+              <span className="text-sm text-text-muted">{data?.lastRefreshAt ? formatTimeAgo(data.lastRefreshAt, now) : "Never"}</span>
+            </div>
+            <Separator className="bg-divider" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Last success</span>
+              <span className="text-sm text-text-muted">{data?.lastSuccessfulRefreshAt ? formatTimeAgo(data.lastSuccessfulRefreshAt, now) : "—"}</span>
             </div>
           </CardContent>
         </Card>
@@ -772,10 +806,16 @@ export default function Home() {
               minHeight="100px"
             >
               <div className="grid grid-cols-5 gap-3">
-                {["Issues", "PRs", "CI Runs", "Stale", "Sessions"].map((label) => (
-                  <div key={label} className="flex flex-col gap-1 rounded-lg border border-card-border bg-card-bg p-3">
-                    <span className="text-xs text-text-muted">{label}</span>
-                    <span className="text-lg font-semibold text-text-primary">—</span>
+                {[
+                  { label: "Issues", value: cards?.throughput.issuesClosed ?? 0 },
+                  { label: "PRs", value: cards?.throughput.prsMerged ?? 0 },
+                  { label: "CI Runs", value: cards?.ci.totalRuns ?? 0 },
+                  { label: "Stale", value: (cards?.staleWork.staleIssues ?? 0) + (cards?.staleWork.stalePrs ?? 0) },
+                  { label: "Sessions", value: cards?.sessionUsage.totalSessions ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="flex flex-col gap-1 rounded-lg border border-card-border bg-card-bg p-3">
+                    <span className="text-xs text-text-muted">{item.label}</span>
+                    <span className="text-lg font-semibold text-text-primary">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -825,6 +865,38 @@ export default function Home() {
           );
         })()}
       </section>
+
+      {(() => {
+        const coverage = data?.dashboardWindow?.coverage;
+        const warnings = data?.dashboardWindow?.warnings ?? [];
+        const hasCoverage = coverage && (coverage.missingDays > 0 || !coverage.isComplete);
+        if (!hasCoverage && warnings.length === 0) return null;
+        return (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-card-border bg-card-bg px-4 py-2 text-xs text-text-muted">
+            {coverage && (
+              <span>
+                Coverage: {coverage.daysWithData}/{coverage.totalDays} days
+                {coverage.missingDays > 0 && (
+                  <>
+                    <span className="mx-1">·</span>
+                    <span className="text-status-warning">{coverage.missingDays} missing</span>
+                  </>
+                )}
+              </span>
+            )}
+            {warnings.length > 0 &&
+              warnings.slice(0, 3).map((w, i) => (
+                <>
+                  <span key={`sep-${i}`} aria-hidden="true" className="text-divider">|</span>
+                  <span key={`w-${i}`} className="text-status-warning max-w-[300px] truncate">{w}</span>
+                </>
+              ))}
+            {warnings.length > 3 && (
+              <span className="text-text-muted">+{warnings.length - 3} more</span>
+            )}
+          </div>
+        );
+      })()}
 
       <section aria-label="Attention queue" className="mt-6">
         <Card className="border-card-border bg-card-bg">
