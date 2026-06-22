@@ -206,7 +206,7 @@ export function createApiClient(opts: PAClientOptions) {
 
     async fetchWorkflowRuns(): Promise<WorkflowRunMetric[]> {
       const workflowNames = await fetchWorkflows()
-      const runs = await paginateCollection<GHWorkflowRunRaw>('/actions/runs?status=all', 'workflow_runs')
+      const runs = await paginateCollection<GHWorkflowRunRaw>('/actions/runs', 'workflow_runs')
       return runs.map((item) => {
         return {
           id: String(item.id),
