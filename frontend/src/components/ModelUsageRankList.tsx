@@ -8,7 +8,7 @@ import type { RankedModelEntry } from "@/lib/rank-models";
 import { UsageBar } from "@/components/UsageBar";
 import { cn } from "@/lib/utils";
 import { averageCostPerMessage, hasDetailData, totalTokens as sumEntryTokens } from "./model-usage-utils";
-import type { DashboardWindowSessionUsageSummary } from "@/types";
+import type { TokenUsageRow } from "@/types";
 
 function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -28,7 +28,7 @@ function formatCurrency(value: number | null | undefined): string {
 }
 
 export interface ModelUsageRankListProps {
-  sessionUsage: DashboardWindowSessionUsageSummary | null;
+  tokenUsage: TokenUsageRow | null;
 }
 
 function ModelRow({
@@ -152,8 +152,8 @@ function ModelRow({
   );
 }
 
-export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
-  const modelUsage = useMemo(() => sessionUsage?.modelUsage ?? [], [sessionUsage?.modelUsage]);
+export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
+  const modelUsage = useMemo(() => tokenUsage?.modelUsage ?? [], [tokenUsage?.modelUsage]);
   const ranked = useMemo(() => rankModelUsage(modelUsage), [modelUsage]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandAllMode, setExpandAllMode] = useState(false);
@@ -211,19 +211,19 @@ export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
         <span className="text-text-muted">
           Sessions{" "}
           <span className="font-semibold text-text-primary tabular-nums">
-            {sessionUsage!.totalSessions}
+            {tokenUsage!.totalSessions}
           </span>
         </span>
         <span className="text-text-muted">
           Messages{" "}
           <span className="font-semibold text-text-primary tabular-nums">
-            {formatNumber(sessionUsage!.messages)}
+            {formatNumber(tokenUsage!.totalMessages)}
           </span>
         </span>
         <span className="text-text-muted">
           Tokens{" "}
           <span className="font-semibold text-text-primary tabular-nums">
-            {formatNumber(sumEntryTokens(sessionUsage!))}
+            {formatNumber(tokenUsage!.totalTokens)}
           </span>
         </span>
         <span className="text-text-muted">
@@ -231,12 +231,12 @@ export function ModelUsageRankList({ sessionUsage }: ModelUsageRankListProps) {
           <span
             className={cn(
               "font-semibold tabular-nums",
-              sessionUsage!.totalCost != null && sessionUsage!.totalCost > 0
+              tokenUsage!.totalCost != null && tokenUsage!.totalCost > 0
                 ? "text-accent-primary"
                 : "text-text-primary",
             )}
           >
-            {formatCurrency(sessionUsage!.totalCost)}
+            {formatCurrency(tokenUsage!.totalCost)}
           </span>
         </span>
       </div>

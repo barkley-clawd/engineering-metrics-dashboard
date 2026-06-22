@@ -6,7 +6,7 @@ import { getBooleanEnv } from '../lib/env'
 import { buildDiagnostics } from '../lib/build-diagnostics'
 import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig } from '../lib/runtime-config'
 import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
-import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate } from '../../types/aggregates'
+import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
 import type { TokenUsageInsert, TokenUsageRow } from '../../types/opencode'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
@@ -768,7 +768,7 @@ function readAggregatesForSnapshot(snapshotId: string): DashboardAggregates | nu
   let ci: CIAggregate | null = null
   let staleWork: StaleWorkAggregate | null = null
   let sessionUsage: SessionUsageAggregate | null = null
-  let tokenUsage: import('../../../types/aggregates').TokenUsageAggregate | null = null
+  let tokenUsage: TokenUsageAggregate | null = null
 
   for (const row of rows) {
     const data = JSON.parse(row.data)
@@ -778,7 +778,7 @@ function readAggregatesForSnapshot(snapshotId: string): DashboardAggregates | nu
       case 'ci': ci = data as CIAggregate; break
       case 'staleWork': staleWork = data as StaleWorkAggregate; break
       case 'sessionUsage': sessionUsage = data as SessionUsageAggregate; break
-      case 'tokenUsage': tokenUsage = data as import('../../../types/aggregates').TokenUsageAggregate; break
+      case 'tokenUsage': tokenUsage = data as TokenUsageAggregate; break
     }
   }
 

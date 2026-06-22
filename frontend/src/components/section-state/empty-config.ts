@@ -15,11 +15,11 @@ export const emptyStateConfigs: Record<SectionKind, EmptyStateConfig> = {
   },
   "model-usage": {
     message: "No model usage recorded",
-    hint: "OpenCode provider data appears after sessions",
+    hint: "OpenCode stats appear after the next refresh",
   },
   "session-usage": {
     message: "No session data yet",
-    hint: "Configure OpenCode stats collection",
+    hint: "OpenCode stats appear after the next refresh",
   },
   diagnostics: {
     message: "No diagnostics available",

@@ -514,10 +514,7 @@ export default function Home() {
     isEmpty: filteredItems.length === 0 && !isFiltered,
   });
 
-  const sessionUsage = useMemo<DashboardWindowSessionUsageSummary | null>(
-    () => data?.dashboardWindow?.sessionUsage ?? null,
-    [data],
-  );
+  const tokenUsage = useMemo(() => data?.snapshot?.aggregates?.tokenUsage ?? null, [data]);
 
   const cards = useMemo<DashboardWindowCards | null>(
     () => data?.dashboardWindow?.cards ?? null,
@@ -954,7 +951,7 @@ export default function Home() {
               onRetry={() => fetch()}
               minHeight="160px"
             >
-              <ModelUsageRankList sessionUsage={sessionUsage} />
+              <ModelUsageRankList tokenUsage={tokenUsage} />
             </SectionState>
           </CardContent>
         </Card>

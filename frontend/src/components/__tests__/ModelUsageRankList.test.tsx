@@ -1,74 +1,50 @@
 import { describe, expect, it } from "@jest/globals";
-import { averageCostPerMessage, hasDetailData, totalTokens } from "../model-usage-utils";
-import type { DashboardWindowSessionUsageSummary } from "@/types";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ModelUsageRankList } from "../ModelUsageRankList";
+import type { TokenUsageRow } from "@/types";
 
-function makeSummary(
-  overrides: Partial<DashboardWindowSessionUsageSummary> = {},
-): DashboardWindowSessionUsageSummary {
-  return {
-    periodStart: "2026-06-01",
-    periodEnd: "2026-06-30",
-    totalSessions: 2,
-    startedSessions: 2,
-    completedSessions: 2,
-    erroredSessions: 0,
-    stuckSessions: 0,
-    lastActivityAt: null,
-    messages: 100,
-    activeDays: 5,
-    totalCost: 12.5,
-    averageCostPerDay: 2.5,
-    averageTokensPerSession: 1000,
-    medianTokensPerSession: 900,
-    inputTokens: 500,
-    outputTokens: 300,
-    cacheReadTokens: 100,
-    cacheWriteTokens: 50,
-    uniqueTools: [],
-    toolUsage: [],
-    modelUsage: [],
-    topActions: [],
-    errorCount: 0,
-    status: "available",
-    message: null,
-    ...overrides,
+describe("ModelUsageRankList", () => {
+  const tokenUsage: TokenUsageRow = {
+    periodStart: "2026-05-25T00:00:00.000Z",
+    periodEnd: "2026-06-22T00:00:00.000Z",
+    source: "opencode",
+    toolName: "opencode",
+    totalSessions: 4,
+    totalMessages: 16,
+    totalTokens: 2000,
+    totalCost: 1.25,
+    modelUsage: [
+      {
+        modelName: "opencode-go/minimax-m3",
+        messages: 10,
+        inputTokens: 800,
+        outputTokens: 900,
+        cacheReadTokens: 50,
+        cacheWriteTokens: 20,
+        cost: 0.8,
+      },
+      {
+        modelName: "opencode-go/deepseek-v4-flash",
+        messages: 6,
+        inputTokens: 200,
+        outputTokens: 30,
+        cacheReadTokens: null,
+        cacheWriteTokens: null,
+        cost: 0.45,
+      },
+    ],
+    rawJson: null,
+    collectedAt: "2026-06-22T00:00:00.000Z",
   };
-}
 
-describe("ModelUsageRankList helpers", () => {
-  it("computes total tokens from the session summary", () => {
-    expect(totalTokens(makeSummary())).toBe(950);
-  });
+  it("renders tokenUsage stats", () => {
+    const html = renderToStaticMarkup(<ModelUsageRankList tokenUsage={tokenUsage} />);
 
-  it("recognizes when model details are empty", () => {
-    expect(
-      hasDetailData({
-        modelName: "empty-model",
-        messages: 3,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        cost: 0,
-        isOther: false,
-        proportion: 1,
-      }),
-    ).toBe(false);
-  });
-
-  it("computes average cost per message", () => {
-    expect(
-      averageCostPerMessage({
-        modelName: "gpt-5.4-mini",
-        messages: 80,
-        inputTokens: 500,
-        outputTokens: 250,
-        cacheReadTokens: 100,
-        cacheWriteTokens: 50,
-        cost: 6.25,
-        isOther: false,
-        proportion: 0.8,
-      }),
-    ).toBeCloseTo(0.078125);
+    expect(html).toContain("Sessions");
+    expect(html).toContain("4");
+    expect(html).toContain("16");
+    expect(html).toContain("2000");
+    expect(html).toContain("$1.25");
+    expect(html).toContain("opencode-go/minimax-m3");
   });
 });

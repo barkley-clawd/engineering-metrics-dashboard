@@ -54,7 +54,7 @@ describe("emptyStateConfigs", () => {
       "No model usage recorded"
     );
     expect(emptyStateConfigs["model-usage"].hint).toBe(
-      "OpenCode provider data appears after sessions"
+      "OpenCode stats appear after the next refresh"
     );
   });
 
@@ -63,7 +63,7 @@ describe("emptyStateConfigs", () => {
       "No session data yet"
     );
     expect(emptyStateConfigs["session-usage"].hint).toBe(
-      "Configure OpenCode stats collection"
+      "OpenCode stats appear after the next refresh"
     );
   });
 
