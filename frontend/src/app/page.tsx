@@ -553,7 +553,7 @@ export default function Home() {
               >
                 Signal House
               </h1>
-              <p className="mt-2 text-base text-text-secondary font-body">Developer activity dashboard scaffold</p>
+              <p className="mt-2 text-base text-text-secondary font-body">Know whether work is moving — and where it’s stuck</p>
             </div>
           </div>
         </header>
