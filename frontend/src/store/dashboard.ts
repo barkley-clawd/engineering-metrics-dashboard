@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { fetchDiagnostics, fetchState, triggerRefresh } from "@/lib/api-client";
-import type { LatestState, SourceDiagnostics } from "@/types";
+import type { DashboardStateResponse, SourceDiagnostics } from "@/types";
 
 export type RefreshStatus = "idle" | "running" | "success" | "failed";
 
 export interface DashboardState {
-  data: LatestState | null;
+  data: DashboardStateResponse | null;
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -42,18 +42,18 @@ function startFetchFlags(isFirstLoad: boolean) {
     : { isRefreshing: true, refreshStatus: "running" as const };
 }
 
-function refreshIsRunning(data: LatestState): boolean {
-  return data.refreshInProgress || data.refreshState.status === "running";
+function refreshIsRunning(data: DashboardStateResponse): boolean {
+  return data.status.refreshInProgress || data.status.refreshState.status === "running";
 }
 
-function refreshFinishedAfter(data: LatestState, previousFinishedAt: string | null): boolean {
-  const finishedAt = data.refreshState.lastRunFinishedAt;
+function refreshFinishedAfter(data: DashboardStateResponse, previousFinishedAt: string | null): boolean {
+  const finishedAt = data.status.refreshState.lastRunFinishedAt;
   return Boolean(finishedAt && finishedAt !== previousFinishedAt);
 }
 
 function applyFetchedState(
   state: DashboardState,
-  data: LatestState,
+  data: DashboardStateResponse,
   kind: FetchKind,
 ) {
   return {
@@ -62,7 +62,7 @@ function applyFetchedState(
     isRefreshing: false,
     hasEverLoaded: true,
     lastRefreshAt: new Date().toISOString(),
-    lastSuccessfulRefreshAt: data.lastSuccessfulRefreshAt,
+    lastSuccessfulRefreshAt: data.status.lastSuccessfulRefreshAt,
     refreshStatus: "success" as const,
     manualRefreshStatus:
       kind === "manual" ? ("success" as const) : state.manualRefreshStatus,
@@ -72,7 +72,7 @@ function applyFetchedState(
   };
 }
 
-function applyPolledStateDuringManualRefresh(state: DashboardState, data: LatestState) {
+function applyPolledStateDuringManualRefresh(state: DashboardState, data: DashboardStateResponse) {
   return {
     ...applyFetchedState(state, data, "polled"),
     isRefreshing: true,
@@ -81,9 +81,9 @@ function applyPolledStateDuringManualRefresh(state: DashboardState, data: Latest
   };
 }
 
-function applyFinalManualRefreshState(state: DashboardState, data: LatestState) {
+function applyFinalManualRefreshState(state: DashboardState, data: DashboardStateResponse) {
   const refreshFailed =
-    data.refreshState.status === "failed" || data.refreshState.status === "skipped";
+    data.status.refreshState.status === "failed" || data.status.refreshState.status === "skipped";
 
   if (!refreshFailed) {
     return applyFetchedState(state, data, "manual");
@@ -94,7 +94,7 @@ function applyFinalManualRefreshState(state: DashboardState, data: LatestState) 
     refreshStatus: "failed" as const,
     manualRefreshStatus: "failed" as const,
     manualRefreshErrorTimestamp: Date.now(),
-    error: data.refreshState.lastError ?? "Refresh failed",
+    error: data.status.refreshState.lastError ?? "Refresh failed",
   };
 }
 
@@ -146,7 +146,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   manualRefresh: async () => {
     const state = get();
-    const previousFinishedAt = state.data?.refreshState.lastRunFinishedAt ?? null;
+      const previousFinishedAt = state.data?.status.refreshState.lastRunFinishedAt ?? null;
     const startedAt = Date.now();
 
     set({
@@ -181,7 +181,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       set({ refreshStatus: "running" });
       const data = await fetchState();
-      const apiLastRefreshAt = data.lastSuccessfulRefreshAt;
+        const apiLastRefreshAt = data.status.lastSuccessfulRefreshAt;
 
       if (apiLastRefreshAt && apiLastRefreshAt !== state.lastPollTimestamp) {
         set((s) => ({

@@ -69,7 +69,7 @@ function isEmptyDiagnostics(diagnostics: DashboardDiagnostics) {
 export function SourceHealthSection() {
   const dashboardDiagnostics = useDashboardStore((state) => state.diagnostics);
   const dataDiagnostics = useDashboardStore((state) => state.data?.diagnostics ?? null);
-  const refreshDurationMs = useDashboardStore((state) => state.data?.refreshState?.durationMs ?? null);
+  const refreshDurationMs = useDashboardStore((state) => state.data?.status.refreshState.durationMs ?? null);
   const loadDiagnostics = useDashboardStore((state) => state.loadDiagnostics);
   const diagnosticsLoading = useDashboardStore((state) => state.diagnosticsLoading);
   const diagnosticsError = useDashboardStore((state) => state.diagnosticsError);

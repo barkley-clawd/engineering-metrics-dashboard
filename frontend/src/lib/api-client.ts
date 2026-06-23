@@ -1,13 +1,13 @@
-import type { LatestState, SourceDiagnostics } from "@/types";
+import type { DashboardStateResponse, SourceDiagnostics } from "@/types";
 
 const API_BASE = "";
 
-export async function fetchState(): Promise<LatestState> {
+export async function fetchState(): Promise<DashboardStateResponse> {
   const res = await fetch(`${API_BASE}/api/state`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed fetch state: ${res.statusText}`);
-  return (await res.json()) as LatestState;
+  return (await res.json()) as DashboardStateResponse;
 }
 
 export interface TriggerRefreshResult {

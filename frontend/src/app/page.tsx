@@ -23,10 +23,9 @@ import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { TrendCard } from "@/components/TrendCard";
 import type {
+  DashboardAttentionItem,
   DashboardWindowCards,
   DashboardWindowDay,
-  IssueMetric,
-  PullRequestMetric,
 } from "@/types";
 import type { EChartsOption } from "echarts-for-react";
 
@@ -52,80 +51,7 @@ type TypeFilter = "issues" | "prs" | "all";
 type ConditionFilter = "stale" | "blocked" | "failing" | "all";
 type SortMode = "oldest" | "urgent";
 
-type AttentionItem = {
-  id: string;
-  kind: "issue" | "pr";
-  title: string;
-  repo: string;
-  ageDays: number;
-  priorityTier: "stale" | "ci-failing" | "ci-blocked" | "ci-pending";
-  statusLabel: string;
-};
-
-const STALE_THRESHOLD_DAYS_FALLBACK = 14;
-
-function daysSince(iso: string | null | undefined, nowMs: number): number {
-  if (!iso) return 0;
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return 0;
-  return Math.max(0, Math.floor((nowMs - ts) / (1000 * 60 * 60 * 24)));
-}
-
-function deriveAttentionItems(
-  issues: IssueMetric[],
-  pullRequests: PullRequestMetric[],
-  nowMs: number,
-  staleThresholdDays: number,
-): AttentionItem[] {
-  const items: AttentionItem[] = [];
-
-  for (const issue of issues) {
-    if (issue.state !== "open") continue;
-    const ageDays = daysSince(issue.updatedAt, nowMs);
-    const isStale = ageDays >= staleThresholdDays;
-    items.push({
-      id: `issue-${issue.id}`,
-      kind: "issue",
-      title: issue.title,
-      repo: issue.repoKey,
-      ageDays,
-      priorityTier: isStale ? "stale" : "ci-pending",
-      statusLabel: isStale ? "Stale" : "Active",
-    });
-  }
-
-  for (const pr of pullRequests) {
-    if (pr.state !== "open") continue;
-    const ageDays = daysSince(pr.updatedAt, nowMs);
-    const isStale = ageDays >= staleThresholdDays;
-    let priorityTier: AttentionItem["priorityTier"];
-    let statusLabel: string;
-    if (pr.ciStatus === "failure") {
-      priorityTier = "ci-failing";
-      statusLabel = "CI failing";
-    } else if (pr.ciStatus === "pending") {
-      priorityTier = isStale ? "stale" : "ci-pending";
-      statusLabel = isStale ? "Stale" : "CI pending";
-    } else if (isStale) {
-      priorityTier = "stale";
-      statusLabel = "Stale";
-    } else {
-      priorityTier = "ci-pending";
-      statusLabel = "Active";
-    }
-    items.push({
-      id: `pr-${pr.id}`,
-      kind: "pr",
-      title: pr.title,
-      repo: pr.repoKey,
-      ageDays,
-      priorityTier,
-      statusLabel,
-    });
-  }
-
-  return items;
-}
+type AttentionItem = DashboardAttentionItem;
 
 function throughputStatus(status: string | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
   if (!status) return "unknown";
@@ -472,24 +398,9 @@ export default function Home() {
     isEmpty: !data && hasEverLoaded,
   });
 
-  const snapshotIssues = useMemo<IssueMetric[]>(
-    () => data?.snapshot?.issues ?? [],
-    [data],
-  );
-
-  const snapshotPullRequests = useMemo<PullRequestMetric[]>(
-    () => data?.snapshot?.pullRequests ?? [],
-    [data],
-  );
-
-  const staleThresholdDays = useMemo<number>(
-    () => data?.snapshot?.aggregates?.staleWork?.staleThresholdDays ?? STALE_THRESHOLD_DAYS_FALLBACK,
-    [data],
-  );
-
   const attentionItems = useMemo<AttentionItem[]>(
-    () => deriveAttentionItems(snapshotIssues, snapshotPullRequests, now, staleThresholdDays),
-    [snapshotIssues, snapshotPullRequests, now, staleThresholdDays],
+    () => data?.attention.items ?? [],
+    [data],
   );
 
   const filteredItems = useMemo(() => {
@@ -514,17 +425,15 @@ export default function Home() {
     isEmpty: filteredItems.length === 0 && !isFiltered,
   });
 
-  const tokenUsage = useMemo(() => data?.snapshot?.aggregates?.tokenUsage ?? null, [data]);
+  const tokenUsage = useMemo(() => data?.usage.tokenUsage ?? null, [data]);
 
   const cards = useMemo<DashboardWindowCards | null>(
-    () => data?.dashboardWindow?.cards ?? null,
+    () => data?.summary ?? null,
     [data],
   );
   const monitoredProjectCount = useMemo(
     () =>
-      data?.diagnostics.discoveredRepos.length ??
-      data?.snapshot?.repositories.length ??
-      0,
+      data?.diagnostics.discoveredRepos.length ?? 0,
     [data],
   );
 
@@ -775,7 +684,7 @@ export default function Home() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {data?.isStale && !staleBannerDismissed && (
+        {data?.status.isStale && !staleBannerDismissed && (
           <motion.div
             key="stale-banner"
             role="alert"
@@ -787,7 +696,7 @@ export default function Home() {
           >
             <div className="flex items-center justify-between px-4 py-2 text-sm">
               <span style={{ color: "var(--color-status-warning)" }}>
-                {data.staleReason ?? "Dashboard data may be stale — last successful refresh was more than 2 minutes ago"}
+              {data.status.staleReason ?? "Dashboard data may be stale — last successful refresh was more than 2 minutes ago"}
               </span>
               <button
                 type="button"
@@ -841,12 +750,12 @@ export default function Home() {
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Last refresh</span>
-              <span className="text-sm text-text-muted">{data?.lastRefreshAt ? formatTimeAgo(data.lastRefreshAt, now) : "Never"}</span>
+              <span className="text-sm text-text-muted">{data?.status.lastRefreshAt ? formatTimeAgo(data.status.lastRefreshAt, now) : "Never"}</span>
             </div>
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Last success</span>
-              <span className="text-sm text-text-muted">{data?.lastSuccessfulRefreshAt ? formatTimeAgo(data.lastSuccessfulRefreshAt, now) : "—"}</span>
+              <span className="text-sm text-text-muted">{data?.status.lastSuccessfulRefreshAt ? formatTimeAgo(data.status.lastSuccessfulRefreshAt, now) : "—"}</span>
             </div>
           </CardContent>
         </Card>
@@ -918,7 +827,7 @@ export default function Home() {
 
       <section aria-label="Trend charts" className="mt-6">
         {(() => {
-          const days = data?.dashboardWindow?.days ?? [];
+          const days = data?.window.days ?? [];
           const trendLoading = !hasEverLoaded && isLoading;
           const trendEmpty = days.length === 0;
           const throughputOption = trendEmpty ? null : buildThroughputOption(days);
@@ -959,8 +868,8 @@ export default function Home() {
       </section>
 
       {(() => {
-        const coverage = data?.dashboardWindow?.coverage;
-        const warnings = data?.dashboardWindow?.warnings ?? [];
+        const coverage = data?.window.coverage;
+        const warnings = data?.window.warnings ?? [];
         const hasCoverage = coverage && (coverage.missingDays > 0 || !coverage.isComplete);
         if (!hasCoverage && warnings.length === 0) return null;
         return (

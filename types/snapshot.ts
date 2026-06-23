@@ -3,13 +3,13 @@ import type {
   PullRequestMetric,
   WorkflowRunMetric,
   RepositoryIdentity,
-  RepositoryMetric,
   SessionMetric,
   LocalGitRepoMetric,
   ErrorMetric,
 } from './metrics'
 import type { DashboardAggregates } from './aggregates'
 import type { DailyMetricsRow } from './daily-metrics'
+import type { TokenUsageRow } from './opencode'
 
 export interface MetricSnapshot {
   id: string
@@ -160,6 +160,59 @@ export interface DashboardWindow {
   cards: DashboardWindowCards
   coverage: DashboardWindowCoverage
   warnings: string[]
+}
+
+export interface DashboardStateWindow {
+  startDay: string
+  endDay: string
+  days: DashboardWindowDay[]
+  missingDays: string[]
+  latestDay: DailyMetricsRow | null
+  coverage: DashboardWindowCoverage
+  warnings: string[]
+}
+
+export interface DashboardStateStatus {
+  lastRefreshAt: string | null
+  lastSuccessfulRefreshAt: string | null
+  refreshInProgress: boolean
+  isStale: boolean
+  staleReason: string | null
+  pollerEnabled: boolean
+  refreshStatus: RefreshRunStatus
+  lastFailureAt: string | null
+  lastSuccessAt: string | null
+  nextRunAt: string | null
+  refreshState: RefreshRunState
+}
+
+export interface DashboardStateUsage {
+  sessionUsage: DashboardWindowSessionUsageSummary | null
+  tokenUsage: TokenUsageRow | null
+}
+
+export interface DashboardAttentionItem {
+  id: string
+  kind: 'issue' | 'pr'
+  title: string
+  repo: string
+  ageDays: number
+  priorityTier: 'stale' | 'ci-failing' | 'ci-blocked' | 'ci-pending'
+  statusLabel: string
+}
+
+export interface DashboardStateAttention {
+  staleThresholdDays: number
+  items: DashboardAttentionItem[]
+}
+
+export interface DashboardStateResponse {
+  window: DashboardStateWindow
+  summary: DashboardWindowCards
+  usage: DashboardStateUsage
+  attention: DashboardStateAttention
+  status: DashboardStateStatus
+  diagnostics: SourceDiagnostics
 }
 
 export interface LatestState {
