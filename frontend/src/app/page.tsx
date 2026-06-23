@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
 import { HealthSignalCard } from "@/components/HealthSignalCard";
@@ -25,7 +25,6 @@ import { TrendCard } from "@/components/TrendCard";
 import type {
   DashboardWindowCards,
   DashboardWindowDay,
-  DashboardWindowSessionUsageSummary,
   IssueMetric,
   PullRequestMetric,
 } from "@/types";
@@ -418,11 +417,11 @@ function computeCIFooter(days: DashboardWindowDay[]): string {
 }
 
 export default function Home() {
+  const shouldReduceMotion = useReducedMotion();
   const {
     data,
     isLoading,
     error,
-    selectedRepoKey,
     hasEverLoaded,
     manualRefreshStatus,
     manualRefreshErrorTimestamp,
@@ -521,6 +520,13 @@ export default function Home() {
     () => data?.dashboardWindow?.cards ?? null,
     [data],
   );
+  const monitoredProjectCount = useMemo(
+    () =>
+      data?.diagnostics.discoveredRepos.length ??
+      data?.snapshot?.repositories.length ??
+      0,
+    [data],
+  );
 
   const healthSummaryLoading = !hasEverLoaded && isLoading;
   const healthSummaryError = cards == null ? error : null;
@@ -539,7 +545,54 @@ export default function Home() {
       <nav aria-label="Dashboard controls">
         <header className="mb-8">
           <div className="flex items-center gap-4">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden">
+          <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+            <div
+              className="pointer-events-none absolute h-16 w-16 rounded-full border"
+              style={{
+                borderColor: "rgba(56, 189, 248, 0.28)",
+                backgroundColor: "rgba(56, 189, 248, 0.045)",
+              }}
+              aria-hidden="true"
+            />
+            {[0, 2.1, 4.2].map((delay, index) => (
+              <motion.span
+                key={delay}
+                aria-hidden="true"
+                className="pointer-events-none absolute h-16 w-16 rounded-full border"
+                style={{
+                  borderColor: `rgba(56, 189, 248, ${index === 0 ? 0.56 : 0.42})`,
+                  backgroundColor: "rgba(56, 189, 248, 0.035)",
+                }}
+                initial={
+                  shouldReduceMotion
+                    ? { scale: 1.08, opacity: index === 0 ? 0.32 : 0.18 }
+                    : { scale: 1, opacity: 0 }
+                }
+                animate={
+                  shouldReduceMotion
+                    ? { scale: 1.08, opacity: index === 0 ? 0.32 : 0.18 }
+                    : { scale: [1, 2.08], opacity: [0, 0.52, 0] }
+                }
+                transition={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        duration: 6.3,
+                        delay,
+                        repeat: Infinity,
+                        repeatDelay: 0.4,
+                        times: [0, 0.18, 1],
+                        ease: "easeOut",
+                      }
+                }
+              />
+            ))}
+<motion.div
+              className="relative h-16 w-16 overflow-hidden rounded-full"
+              initial="idle"
+              whileHover="lit"
+              whileFocus="lit"
+            >
               <Image
                 src="/signal-house-logo.png"
                 alt="Signal House logo"
@@ -548,7 +601,44 @@ export default function Home() {
                 sizes="64px"
                 className="object-contain"
               />
-            </div>
+              <motion.div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-[38%] h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle, rgba(241, 250, 255, 0.92) 0%, rgba(125, 211, 252, 0.58) 24%, rgba(56, 189, 248, 0.22) 52%, rgba(56, 189, 248, 0) 76%)",
+                  mixBlendMode: "screen",
+                }}
+                variants={{
+                  idle: { opacity: 0, scale: 0.45 },
+                  lit: shouldReduceMotion
+                    ? { opacity: 0.74, scale: 1 }
+                    : { opacity: [0, 0.86, 0.72], scale: [0.45, 1.1, 1] },
+                }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : { duration: 0.42, ease: "easeOut" }
+                }
+              />
+              <motion.div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-[38%] h-3 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full blur-sm"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(56, 189, 248, 0), rgba(186, 230, 253, 0.62), rgba(56, 189, 248, 0))",
+                  mixBlendMode: "screen",
+                }}
+                variants={{
+                  idle: { opacity: 0, scaleX: 0.35 },
+                  lit: shouldReduceMotion
+                    ? { opacity: 0.44, scaleX: 1 }
+                    : { opacity: [0, 0.5, 0.38], scaleX: [0.35, 1.08, 1] },
+                }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeOut" }
+                }
+              />
+            </motion.div>
+          </div>
             <div>
               <h1
                 className="text-3xl font-bold tracking-tight text-text-primary"
@@ -712,29 +802,31 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <section aria-label="Repository and status" className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-text-primary">
-              Repository
-              <Badge variant="secondary" className="text-xs">
-                {selectedRepoKey}
-              </Badge>
-            </CardTitle>
-            <CardDescription>Current repository context</CardDescription>
-          </CardHeader>
-          <CardContent>
+    <section aria-label="Monitored projects and status" className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-text-primary">
+            Monitored Projects
+            <Badge variant="secondary" className="text-xs">
+              {monitoredProjectCount}
+            </Badge>
+          </CardTitle>
+          <CardDescription>Configured folders and tracked repositories</CardDescription>
+        </CardHeader>
+        <CardContent>
             <SectionState
               state={repoState}
               section="health"
               errorMessage={error ?? undefined}
               onRetry={() => fetch()}
               minHeight="24px"
-            >
-              <p className="text-sm text-text-secondary">Data loaded</p>
-            </SectionState>
-          </CardContent>
-        </Card>
+          >
+            <p className="text-sm text-text-secondary">
+              Aggregate view across all discovered projects
+            </p>
+          </SectionState>
+        </CardContent>
+      </Card>
 
         <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
           <CardHeader>

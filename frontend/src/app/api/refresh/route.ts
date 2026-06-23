@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { initDb } from "../../../../../server/db/client";
-import { runRefresh } from "../../../../../server/lib/refresh/run-refresh";
+import { startRefreshInBackground } from "../../../../../server/lib/refresh/run-refresh";
 
-export const maxDuration = 300;
+export const maxDuration = 10;
 
 let dbInitialized = false;
 
@@ -16,23 +16,22 @@ async function ensureDb(): Promise<void> {
 export async function POST() {
   try {
     await ensureDb();
-    const result = await runRefresh();
+    const result = await startRefreshInBackground();
+
     if (result.skipped) {
       return NextResponse.json(
         {
           started: false,
           skipped: true,
-          skippedReason: result.errorSummary ?? "Refresh already in progress",
+          skippedReason: result.skippedReason ?? "Refresh already in progress",
         },
         { status: 409 },
       );
     }
-    return NextResponse.json({
-      started: true,
-      ...result,
-    });
+
+    return NextResponse.json(result, { status: 202 });
   } catch (error) {
-    console.error("[api/refresh] failed to run refresh:", error);
+    console.error("[api/refresh] failed to start refresh:", error);
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { error: "Refresh failed", message },

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-import { initDb, getLatestState, getDailyMetricsRange, getDailyMetricsRangeForRepo } from "../../../../../server/db/client";
+import { NextResponse } from "next/server";
+import { initDb, getLatestState, getDailyMetricsRange } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import { getDashboardWindowDays } from "../../../../../server/lib/runtime-config";
-import { ALL_REPOS_REPO_KEY } from "../../../../../types/daily-metrics";
 
 let dbInitialized = false;
 
@@ -13,12 +12,9 @@ async function ensureDb(): Promise<void> {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     await ensureDb();
-
-    const repoKey =
-      request.nextUrl.searchParams.get("repoKey") ?? ALL_REPOS_REPO_KEY;
 
     const state = getLatestState();
 
@@ -28,10 +24,7 @@ export async function GET(request: NextRequest) {
     startDate.setUTCDate(startDate.getUTCDate() - (windowDays - 1));
     const startDay = startDate.toISOString().slice(0, 10);
 
-    const rows =
-      repoKey === ALL_REPOS_REPO_KEY
-        ? getDailyMetricsRange(startDay, endDay)
-        : getDailyMetricsRangeForRepo(startDay, endDay, repoKey);
+    const rows = getDailyMetricsRange(startDay, endDay);
     const sessionUsageAggregate = state.snapshot?.aggregates?.sessionUsage ?? null;
 
     const dashboardWindow = buildDashboardWindow(
@@ -43,7 +36,6 @@ export async function GET(request: NextRequest) {
 
     const body = {
       ...state,
-      selectedRepoKey: repoKey,
       dashboardWindow,
     };
 

@@ -205,15 +205,17 @@ The service reads from `~/.config/clawd/signal-house.env`. Local dev can use a `
 Runtime defaults are centralized in `server/lib/runtime-config.ts`, which is the source of truth for poller, dashboard, database refresh history, discovery, orchestrator, and session-collector defaults.
 
 ```bash
-SECRET_HOUSE_GITHUB_TOKEN=ghp_your_token_here
-SECRET_HOUSE_GITHUB_OWNER=your-org-or-user
-SECRET_HOUSE_GITHUB_REPO=your-repo
-
 SECRET_HOUSE_GIT_REPOS=/path/to/repo1,/path/to/repo2
 SECRET_HOUSE_PROJECT_ROOTS=/path/to/workspace
 SECRET_HOUSE_GIT_REPO_GLOBS=*
 SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH=3
 SECRET_HOUSE_GIT_EXCLUDE=node_modules,dist
+
+SECRET_HOUSE_GITHUB_TOKEN=ghp_your_token_here
+# Optional: seed one GitHub repository manually. Repositories discovered from
+# tracked local roots with GitHub remotes are also collected when a token exists.
+SECRET_HOUSE_GITHUB_OWNER=your-org-or-user
+SECRET_HOUSE_GITHUB_REPO=your-repo
 
 SECRET_HOUSE_OPENCODE_BIN=
 SECRET_HOUSE_OPENCODE_COMMAND=opencode
@@ -226,6 +228,10 @@ SECRET_HOUSE_RUN_ON_STARTUP=true
 
 DB_DIR=/home/openclaw/projects/signal-house/.data
 ```
+
+### Monitoring scope
+
+Signal House dashboard state is always an aggregate across all configured and discovered projects. Configure explicit repositories with `SECRET_HOUSE_GIT_REPOS`, and configure folders to scan with `SECRET_HOUSE_PROJECT_ROOTS`. The refresh runner merges explicit paths and discovered repositories, dedupes them, stores per-repo source rows internally, then serves the dashboard from aggregate daily metrics.
 
 ### GitHub configuration
 
@@ -245,7 +251,7 @@ DB_DIR=/home/openclaw/projects/signal-house/.data
 | `SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH` | Maximum subdirectory depth for discovery (default `3`, `0` = no recursion) |
 | `SECRET_HOUSE_GIT_EXCLUDE`          | Comma-separated directory names to skip during discovery        |
 
-Explicit `SECRET_HOUSE_GIT_REPOS` paths and auto-discovered paths are merged. Duplicates are removed automatically. Invalid values (e.g. a non-numeric `MAX_DEPTH`) produce a warning and are ignored rather than crashing.
+Explicit `SECRET_HOUSE_GIT_REPOS` paths and auto-discovered paths are merged into the monitored project set. Duplicates are removed automatically. Invalid values (e.g. a non-numeric `MAX_DEPTH`) produce warnings and are ignored rather than crashing.
 
 ### OpenCode session configuration
 
