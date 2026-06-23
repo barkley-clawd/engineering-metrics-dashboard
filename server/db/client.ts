@@ -8,7 +8,7 @@ import { getRefreshHistoryLimit, getStaleThresholdMs, getRetentionConfig } from 
 import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, RefreshSourceHealth, RefreshRunStatus, SourceDiagnostics } from '../../types/snapshot'
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
-import type { TokenUsageInsert, TokenUsageRow } from '../../types/opencode'
+import type { TokenUsageRow } from '../../types/opencode'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
 import { computeDailyMetrics } from '../lib/daily-metrics'
 
@@ -122,7 +122,7 @@ function migrate(db: Db): void {
   const runMigrations = db.transaction(() => {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
-    db.exec(SQL.createTokenUsageTable)
+    // TODO: swap to SQL.createDailyTokenUsageTable once the new constant lands (issue #219)
     const row = db.prepare(`SELECT value FROM latest_state WHERE key = 'schema_version'`).get() as { value?: unknown } | undefined
     const current = row ? Number(row.value) : 0
     if (current >= SCHEMA_VERSION) return
@@ -135,7 +135,7 @@ function migrate(db: Db): void {
     db.exec(SQL.createTables)
     db.exec(SQL.createSourceDataTables)
     db.exec(SQL.createDailyMetricsV3)
-    db.exec(SQL.createTokenUsageTable)
+    // TODO: swap to SQL.createDailyTokenUsageTable once the new constant lands (issue #219)
     db.exec(`
       ALTER TABLE daily_metrics_v3 RENAME TO daily_metrics;
       CREATE INDEX IF NOT EXISTS idx_daily_metrics_repo_key
@@ -437,23 +437,6 @@ export function getLatestDailyDayForRepo(repoKey: string): string | null {
   const row = db.prepare(`SELECT day FROM daily_metrics WHERE repo_key = ? ORDER BY day DESC LIMIT 1;`).get(repoKey) as { day?: unknown } | undefined
   return row ? String(row.day) : null
 }
-
-function rowToTokenUsage(row: Record<string, unknown>): TokenUsageRow {
-  return {
-    periodStart: String(row.period_start),
-    periodEnd: String(row.period_end),
-    source: String(row.source),
-    toolName: String(row.tool_name),
-    totalSessions: Number(row.total_sessions),
-    totalMessages: Number(row.total_messages),
-    totalTokens: Number(row.total_tokens),
-    totalCost: row.total_cost != null ? Number(row.total_cost) : null,
-    modelUsage: JSON.parse(String(row.data)).modelUsage ?? [],
-    rawJson: row.raw_json != null ? String(row.raw_json) : null,
-    collectedAt: String(row.collected_at),
-  }
-}
-
 
 // ── Normalized source data write helpers ──────────────────────────
 

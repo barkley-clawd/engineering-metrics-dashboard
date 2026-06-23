@@ -160,7 +160,7 @@ export const SQL = {
   `,
 
   dropTables: `
-    DROP TABLE IF EXISTS opencode_daily_usage;
+    DROP TABLE IF EXISTS daily_token_usage;
     DROP TABLE IF EXISTS source_local_git;
     DROP TABLE IF EXISTS source_repositories;
     DROP TABLE IF EXISTS source_sessions;
@@ -205,44 +205,7 @@ export const SQL = {
     );
   `,
 
-  createTokenUsageTable: `
-    CREATE TABLE IF NOT EXISTS opencode_daily_usage (
-      date             TEXT NOT NULL,
-      source           TEXT NOT NULL DEFAULT 'opencode',
-      total_sessions   INTEGER NOT NULL DEFAULT 0,
-      total_messages   INTEGER NOT NULL DEFAULT 0,
-      total_tokens     INTEGER NOT NULL DEFAULT 0,
-      total_cost       REAL,
-      raw_json         TEXT,
-      collected_at     TEXT NOT NULL,
-      PRIMARY KEY (date, source)
-    );
-  `,
 
-  upsertTokenUsage: `
-    INSERT INTO opencode_daily_usage (date, source, total_sessions, total_messages, total_tokens, total_cost, raw_json, collected_at)
-    VALUES (@date, @source, @totalSessions, @totalMessages, @totalTokens, @totalCost, @rawJson, @collectedAt)
-    ON CONFLICT(date, source) DO UPDATE SET
-      total_sessions = excluded.total_sessions,
-      total_messages = excluded.total_messages,
-      total_tokens = excluded.total_tokens,
-      total_cost = excluded.total_cost,
-      raw_json = excluded.raw_json,
-      collected_at = excluded.collected_at;
-  `,
-
-  getTokenUsages: `
-    SELECT * FROM opencode_daily_usage
-    WHERE (@fromDate IS NULL OR date >= @fromDate)
-      AND (@toDate IS NULL OR date <= @toDate)
-    ORDER BY date DESC;
-  `,
-
-  getLatestTokenUsage: `
-    SELECT * FROM opencode_daily_usage
-    ORDER BY date DESC, collected_at DESC
-    LIMIT 1;
-  `,
 
   insertSnapshot: `
     INSERT INTO snapshots (id, captured_at)
