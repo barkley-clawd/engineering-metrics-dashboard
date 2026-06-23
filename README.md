@@ -1,65 +1,29 @@
-![Signal House logo](https://raw.githubusercontent.com/barkley-clawd/signal-house/refs/heads/main/assets/signal-house-logo.png)
-
 # Signal House
 
-Signal House is a local operator dashboard for Clawd.
+Signal House is a local operator dashboard for Clawd/OpenClaw. It answers one practical question: is work actually healthy, or just looking busy?
 
-It answers one blunt question:
+It is not a generic analytics platform. It is a small local dashboard for workstream health, stale work, PR progress, CI status, refresh health, and local session usage where available.
 
-> Is Clawd actually healthy, or just looking busy?
+![Signal House logo](https://raw.githubusercontent.com/barkley-clawd/signal-house/refs/heads/main/assets/signal-house-logo.png)
 
-It is not a generic analytics dashboard. It is not a full observability platform. It is a focused workstream health screen for the person running OpenClaw day to day.
+## What It Tracks
 
-Signal House runs as a single long-running local daemon. It serves the dashboard, owns the local SQLite state, and keeps the dashboard warm by refreshing on its own schedule.
-
-Signal House should make it obvious whether work is moving, where it is getting stuck, whether PRs are progressing, whether CI is behaving, and whether the system is collecting useful signal instead of noise.
-
-## What Signal House tracks
-
-Signal House is built around practical operator questions:
+Signal House is built around operator questions:
 
 * Is work flowing?
-* Which issues or PRs are stale?
+* Are issues or PRs stale?
 * Are PRs getting merged?
 * Is CI passing or failing?
-* Are checks taking longer than expected?
-* Are local sessions and tools being used?
+* Are local OpenCode/OpenClaw sessions being used?
 * Did the last refresh succeed?
-* Is the displayed data fresh, stale, partial, or missing?
+* Is displayed data fresh, stale, partial, or missing?
 
-If the dashboard cannot answer those questions quickly, it is not doing its job.
-
-## Product scope
-
-Signal House should stay small, sharp, and honest.
-
-It should provide:
-
-* a top-level health summary
-* recent throughput trends
-* cycle time and stale-work indicators
-* a compact blocked/stale work queue
-* recent CI and check outcomes
-* recent OpenCode/OpenClaw session usage where available
-* clear refresh status
-* clear empty, loading, stale, partial, and error states
-
-It should not become:
-
-* a full observability platform
-* a BI dashboard
-* a forecasting tool
-* a multi-team analytics suite
-* a place where questionable metrics are dressed up as truth
-
-If a metric is not available, Signal House should say that plainly. The right fix is to improve instrumentation, not fake confidence.
+If a metric is unavailable, Signal House should say that plainly. The right fix is better instrumentation, not fake confidence.
 
 ## Stack
 
-Signal House uses two codebases in a single repo:
-
 | Layer | Technology | Directory |
-|-------|-----------|-----------|
+| --- | --- | --- |
 | Dashboard UI | Next.js 16, React 19, TypeScript | `frontend/` |
 | Styling | Tailwind CSS 4, shadcn/ui | `frontend/` |
 | State | Zustand | `frontend/` |
@@ -69,81 +33,45 @@ Signal House uses two codebases in a single repo:
 | Data collectors | GitHub API, git, OpenCode CLI | `server/lib/` |
 | Database | SQLite | `.data/metrics.db` |
 
-The backend modules (`server/db/`, `server/lib/`) are imported and called by the Next.js API routes at build time. Everything runs in a single process.
+Backend modules in `server/db` and `server/lib` are imported by Next.js API routes. Everything runs in one local Node process.
 
 ## Architecture
 
-Signal House runs as a single long-running local Node process.
+```text
+Signal House daemon
+├── serves the Next.js dashboard UI
+├── exposes local API routes
+├── owns the local SQLite database
+├── starts server plugins from frontend/src/instrumentation.ts
+├── runs an optional guarded background poller
+├── shares one refresh runner between manual and scheduled refresh
+└── rejects overlapping refreshes with a single in-process/DB lock
+```
+
+The frontend reads local API routes only. It does not call GitHub, git, OpenCode, or local tools directly.
+
+### Data Flow
 
 ```text
-Signal House daemon (one local process)
-├── serves the Next.js dashboard UI on port 8999
-├── exposes local API routes (GET /api/state, GET /api/diagnostics, POST /api/refresh)
-├── imports backend modules from server/db and server/lib
-├── owns the local SQLite database at .data/metrics.db
-├── runs the background refresh loop on process startup (see note below)
-├── rejects overlapping refreshes with a single in-process guard
-└── exits cleanly, clearing the poller timer and in-memory state
+GitHub API ───────► collectors ──┐
+local git ────────► collectors ──┼──► server/db/client.ts (SQLite)
+OpenCode CLI ─────► collectors ──┘
+                                  │
+                                  ▼
+API routes (Next.js) ───────────► Dashboard UI
 ```
 
-The frontend reads from local API routes only. It does not call GitHub or local tools directly.
+### Startup Plugins
 
-The intended shape is:
+Server startup hooks live in `server/plugins/`.
 
-* one daemon process owns the local state and the refresh loop
-* the server routes collect and cache metrics
-* SQLite stores latest snapshots, daily rollups, refresh history, and source health
-* the UI reads cached/local state
-* the background poller keeps the dashboard warm on its own schedule
-* manual refresh uses the same runner and the same concurrency guard as scheduled refresh
-* failed refreshes do not wipe the last good data
+* `server/plugins/db.ts` initializes the DB and runs retention cleanup.
+* `server/plugins/poller.ts` starts the guarded metrics poller when enabled.
+* `server/plugins/index.ts` is the idempotent plugin entrypoint used by `frontend/src/instrumentation.ts`.
 
-### Data flow
+The poller and manual refresh use the same refresh runner and concurrency guard.
 
-```
-OpenCode CLI ───► server/lib/sessions/collector ───┐
-GitHub API   ───► server/lib/github/collector   ───┤
-git local    ───► server/lib/git/collector      ───┼──► server/db/client.ts (SQLite)
-OpenCode     ───► server/lib/opencode-daily     ───┘
-                (orchestrated by server/lib/orchestrator/)
-                                                         │
-                                                         ▼
-API routes (Next.js) ◄── getLatestState(), buildDashboardWindow(), buildDiagnostics()
-    │
-    ▼
-Dashboard UI (React/Next.js) ◄── fetch('/api/state') via zustand store
-```
-
-### Background poller — current status
-
-The poller logic lives in `server/plugins/poller.ts` as a Nitro plugin. In the current Next.js deployment, this plugin does **not** run automatically at startup. Manual refresh via `POST /api/refresh` works, but scheduled background polling is a pending gap. Once the API routes are ported (see issue track), the poller will be re-enabled as part of the Next.js app startup.
-
-### Runtime contract
-
-Signal House is daemon-first and single-instance. It assumes:
-
-* exactly one long-running Signal House process per machine
-* the process owns the local SQLite database file
-* the background poller is started by the server process at startup, not by page or API requests
-* scheduled refresh and manual refresh share the same runner and the same single-flight guard
-* the poller timer and in-memory state are cleared on shutdown
-
-Request-time collection, multi-instance, and serverless deployment models are not supported operating modes.
-
-## Data sources
-
-Signal House uses data that already exists:
-
-* GitHub issues
-* GitHub pull requests
-* GitHub Actions and check runs
-* local git history from configured repos
-* local OpenCode/OpenClaw session metadata where available
-* local logs where ingestion is simple enough to justify
-
-Data sources should fail gracefully. A missing optional source should produce a clear warning, not take the whole dashboard down.
-
-## Local development
+## Local Development
 
 ### Prerequisites
 
@@ -153,286 +81,118 @@ Data sources should fail gracefully. A missing optional source should produce a 
 
 ### Install
 
-Root dependencies (backend modules, shared types):
-
 ```bash
 npm install
-```
-
-Frontend dependencies (Next.js, React, UI components):
-
-```bash
 cd frontend && npm install && cd ..
 ```
 
-### Run the dev server
+### Run Dev Server
 
 ```bash
 cd frontend && npm run dev
 ```
 
-The frontend dev server runs on port 3000 by default. The production service uses port 8999.
+The dev server runs on port `3000` by default. Production examples use port `8999`.
 
-Expected URLs:
-
-| Location      | URL                         |
-| ------------- | --------------------------- |
-| Local machine | `http://localhost:3000`     |
-| LAN device    | `http://<host-lan-ip>:3000` |
-
-Find the host LAN IP:
+### Build
 
 ```bash
-# Linux
-hostname -I | awk '{print $1}'
-
-# macOS
-ipconfig getifaddr en0
+npm run build
 ```
-
-### Build for production
-
-```bash
-cd frontend && npm run build    # builds Next.js frontend (this is what runs in production)
-```
-
-The root workspace is now just shared backend/test code and the production service runs from the `frontend/` Next.js build.
 
 ## Configuration
 
-The service reads from `~/.config/clawd/signal-house.env`. Local dev can use a `.env` file.
+The service reads from `~/.config/clawd/signal-house.env`. Local dev can use a root `.env` file. Start from `.env.example` for the current variable list and safe placeholders.
 
-Runtime defaults are centralized in `server/lib/runtime-config.ts`, which is the source of truth for poller, dashboard, database refresh history, discovery, orchestrator, and session-collector defaults.
+Runtime defaults are centralized in `server/lib/runtime-config.ts`.
 
-```bash
-SECRET_HOUSE_GITHUB_TOKEN=ghp_your_token_here
-SECRET_HOUSE_GITHUB_OWNER=your-org-or-user
-SECRET_HOUSE_GITHUB_REPO=your-repo
+### Common Variables
 
-SECRET_HOUSE_GIT_REPOS=/path/to/repo1,/path/to/repo2
-SECRET_HOUSE_PROJECT_ROOTS=/path/to/workspace
-SECRET_HOUSE_GIT_REPO_GLOBS=*
-SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH=3
-SECRET_HOUSE_GIT_EXCLUDE=node_modules,dist
+| Variable | Purpose |
+| --- | --- |
+| `SECRET_HOUSE_GITHUB_TOKEN` | GitHub token for issues, PRs, Actions, and checks |
+| `SECRET_HOUSE_GITHUB_OWNER` | Optional explicit GitHub owner |
+| `SECRET_HOUSE_GITHUB_REPO` | Optional explicit GitHub repo |
+| `SECRET_HOUSE_GIT_REPOS` | Comma-separated local repo paths |
+| `SECRET_HOUSE_PROJECT_ROOTS` | Comma-separated roots for git repo discovery |
+| `SECRET_HOUSE_GIT_REPO_GLOBS` | Comma-separated filters for discovered repo names |
+| `SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH` | Discovery depth, default `3`; `0` means no recursion |
+| `SECRET_HOUSE_GIT_EXCLUDE` | Comma-separated directory names to skip |
+| `SECRET_HOUSE_OPENCODE_BIN` | Optional explicit OpenCode binary path |
+| `SECRET_HOUSE_OPENCODE_COMMAND` | Command fallback, usually `opencode` |
+| `SECRET_HOUSE_SESSIONS_PERIOD_DAYS` | Number of days for session metrics |
+| `DB_DIR` | SQLite database directory, default `.data` |
 
-SECRET_HOUSE_OPENCODE_BIN=
-SECRET_HOUSE_OPENCODE_COMMAND=opencode
-SECRET_HOUSE_SESSIONS_PERIOD_DAYS=30
+### Poller Variables
 
-SECRET_HOUSE_POLLER_ENABLED=true
-SECRET_HOUSE_POLL_INTERVAL_SECONDS=300
-SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS=5
-SECRET_HOUSE_RUN_ON_STARTUP=true
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `SECRET_HOUSE_POLLER_ENABLED` | Enables background refresh loop | `false` |
+| `SECRET_HOUSE_POLL_INTERVAL_SECONDS` | Poll interval, clamped 15-3600 seconds | `300` |
+| `SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS` | Delay before first scheduled run | `5` |
+| `SECRET_HOUSE_RUN_ON_STARTUP` | Runs refresh shortly after startup | `true` |
 
-DB_DIR=/home/openclaw/projects/signal-house/.data
-```
+Run exactly one poller-enabled Signal House daemon per machine.
 
-### GitHub configuration
+### Access Protection
 
-| Variable                    | Purpose                                                |
-| --------------------------- | ------------------------------------------------------ |
-| `SECRET_HOUSE_GITHUB_TOKEN` | GitHub token used for issues, PRs, Actions, and checks |
-| `SECRET_HOUSE_GITHUB_OWNER` | GitHub owner or organisation                           |
-| `SECRET_HOUSE_GITHUB_REPO`  | GitHub repository name                                 |
-
-### Local git configuration
-
-| Variable                            | Purpose                                                         |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `SECRET_HOUSE_GIT_REPOS`            | Comma-separated list of local repo paths to inspect             |
-| `SECRET_HOUSE_PROJECT_ROOTS`        | Comma-separated root directories to auto-discover git repos in |
-| `SECRET_HOUSE_GIT_REPO_GLOBS`       | Comma-separated glob patterns to filter discovered repo names   |
-| `SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH` | Maximum subdirectory depth for discovery (default `3`, `0` = no recursion) |
-| `SECRET_HOUSE_GIT_EXCLUDE`          | Comma-separated directory names to skip during discovery        |
-
-Explicit `SECRET_HOUSE_GIT_REPOS` paths and auto-discovered paths are merged. Duplicates are removed automatically. Invalid values (e.g. a non-numeric `MAX_DEPTH`) produce a warning and are ignored rather than crashing.
-
-### OpenCode session configuration
-
-| Variable                            | Purpose                                       |
-| ----------------------------------- | --------------------------------------------- |
-| `SECRET_HOUSE_OPENCODE_BIN`         | Optional explicit path to the OpenCode binary |
-| `SECRET_HOUSE_OPENCODE_COMMAND`     | Command fallback, usually `opencode`          |
-| `SECRET_HOUSE_SESSIONS_PERIOD_DAYS` | Number of days to include in session metrics  |
-
-The OpenCode collector runs:
+If binding to LAN, enable lightweight HTTP Basic auth:
 
 ```bash
-opencode stats --days <period>
+SECRET_HOUSE_ACCESS_USERNAME=signal-house
+SECRET_HOUSE_ACCESS_PASSWORD=choose-a-long-random-password
 ```
 
-It parses the overview and tool usage output when available. If OpenCode is unavailable, Signal House should continue running and report the missing source clearly.
+This protects dashboard pages, API routes, and built-in server assets. It does not provide users, sessions, roles, OAuth, TLS, firewalling, or host protection.
 
-### Poller configuration
+### Legacy Env Names
 
-| Variable                                  | Purpose                                            | Default |
-| ----------------------------------------- | -------------------------------------------------- | ------- |
-| `SECRET_HOUSE_POLLER_ENABLED`             | Enables the background refresh loop                | `false` |
-| `SECRET_HOUSE_POLL_INTERVAL_SECONDS`      | Poll interval in seconds (clamped 15–3600)         | `300`   |
-| `SECRET_HOUSE_POLL_STARTUP_DELAY_SECONDS` | Delay before the first scheduled run               | `5`     |
-| `SECRET_HOUSE_RUN_ON_STARTUP`             | Runs a refresh shortly after server startup        | `true`  |
+Preferred `SECRET_HOUSE_*` names take precedence. Legacy fallback names still supported include:
 
-The poller is owned by the Signal House daemon process. It is started at server boot, uses the same refresh runner as manual refresh, and stops cleanly when the daemon exits. Run exactly one Signal House daemon per machine. Do not run multiple poller-enabled instances against the same local state unless locking is explicitly designed for it.
+`GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GIT_REPOS`, `GIT_REPO_ROOTS`, `GIT_REPO_GLOBS`, `GIT_REPO_MAX_DEPTH`, `GIT_REPO_EXCLUDES`, `OPENCODE_BIN`, `OPENCODE_COMMAND`, `SESSIONS_PERIOD_DAYS`, `METRICS_POLLER_ENABLED`, `METRICS_POLL_INTERVAL_SECONDS`, `METRICS_POLL_STARTUP_DELAY_SECONDS`, `METRICS_RUN_ON_STARTUP`.
 
-### Database
+## Refresh
 
-| Variable  | Purpose                                                          | Default |
-| --------- | ---------------------------------------------------------------- | ------- |
-| `DB_DIR`  | Directory for the SQLite database file (no `SECRET_HOUSE_` prefix) | `.data` |
+Manual and scheduled refresh use the same runner.
 
-Signal House may rebuild this local runtime database after schema changes. Existing local cache contents are not guaranteed to survive upgrades.
+* Manual refresh uses `POST /api/refresh`.
+* Overlapping refreshes return `409 Conflict`.
+* Failed refreshes do not wipe last good dashboard data.
+* Stale lock recovery uses `POST /api/refresh/reset-lock`.
 
-### Legacy env names
+The reset-lock endpoint clears only refresh lock state. It does not delete snapshots, daily metrics, source rows, or cached dashboard data.
 
-Each `SECRET_HOUSE_*` variable has a legacy fallback name for backward compatibility. The preferred name takes precedence when both are set. Legacy names:
+## API
 
-`GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GIT_REPOS`, `GIT_REPO_ROOTS`, `GIT_REPO_GLOBS`, `GIT_REPO_MAX_DEPTH`, `GIT_REPO_EXCLUDES`, `OPENCODE_BIN`, `OPENCODE_COMMAND`, `SESSIONS_PERIOD_DAYS`, `METRICS_POLLER_ENABLED`, `METRICS_POLL_INTERVAL_SECONDS`, `METRICS_POLL_STARTUP_DELAY_SECONDS`, `METRICS_RUN_ON_STARTUP`
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/state` | Dashboard state, refresh metadata, rolling window |
+| `GET` | `/api/diagnostics` | Collector status and discovered repositories |
+| `POST` | `/api/refresh` | Start manual refresh |
+| `POST` | `/api/refresh/reset-lock` | Clear a stuck refresh lock |
 
-## Manual refresh
+`GET /api/state` includes latest cached snapshot data, refresh status, stale/partial state, source health, dashboard window, summary cards, trends, usage summaries, and data coverage warnings.
 
-The dashboard includes a manual refresh action.
+## Data Retention
 
-A manual refresh:
+Signal House stores local runtime state in SQLite. Daily metrics are keyed by UTC day (`YYYY-MM-DD`) and are used by rolling dashboard windows and trend charts.
 
-* uses the same refresh runner as the background poller
-* runs through the same in-process concurrency guard as scheduled refresh
-* keeps showing cached data while collection is running
-* is rejected with `HTTP 409` if another refresh is already in progress (manual or scheduled)
-* preserves the last good data if collection fails
+Same-day refreshes overwrite the current day. Earlier days are preserved. Missing days remain explicit gaps instead of being silently zero-filled.
 
-GitHub rate limits still apply. If GitHub is slow, unreachable, or rate-limited, Signal House should show the cached state with a clear stale or partial-data warning.
-
-## Background polling
-
-When enabled, the Signal House daemon starts a guarded background poller at process startup.
-
-The poller:
-
-* is owned by the server process and started by `server/plugins/poller.ts`
-* waits for the configured startup delay
-* runs once on startup when configured to do so
-* refreshes at the configured interval
-* uses the same refresh runner as manual refresh
-* uses the same in-process concurrency guard as manual refresh
-* avoids overlapping runs (scheduled ticks skip while another refresh is in flight)
-* records run status and source health
-* does not crash the server when a collector fails
-* stops cleanly when the daemon shuts down, clearing the timer and in-memory poller state
-
-Manual refresh and scheduled refresh must not fork into separate logic. They share the same runner and the same concurrency guard. If a manual refresh is requested while the poller is mid-run, the manual endpoint responds with `409 Conflict`; if a scheduled tick fires while a manual refresh is running, the poller logs the skip and waits for the next interval.
-
-
-
-## API shape
-
-The main dashboard endpoint is:
-
-```text
-GET /api/state
-```
-
-It returns the latest cached dashboard state, refresh metadata, and the rolling 28-day dashboard window.
-
-A diagnostics endpoint provides detailed collector status:
-
-```text
-GET /api/diagnostics
-```
-
-A manual refresh is triggered via:
-
-```text
-POST /api/refresh
-```
-
-Returns HTTP 409 if a refresh is already in progress.
-
-The `GET /api/state` response includes:
-
-* latest cached snapshot
-* refresh status
-* stale-data status
-* source health
-* selected repo dashboard window (28 days of trend data)
-* session usage summaries and model usage
-* data coverage and warnings
-
-The dashboard should be able to tell the difference between:
-
-* fresh data
-* stale data
-* partial data
-* no data yet
-* refresh in progress
-* last refresh failed but cached data exists
-
-## Daily metrics
-
-Signal House persists daily rollups in SQLite.
-
-Each daily metric row is keyed by UTC day:
-
-```text
-YYYY-MM-DD
-```
-
-Daily rows are used for the rolling dashboard window and trend charts.
-
-Behaviour:
-
-* same-day refreshes overwrite the current day
-* earlier days are preserved
-* missing days remain explicit gaps
-* the API returns chart days in ascending order
-* gaps are not silently zero-filled
-
-This matters because zero-filling missing days makes the dashboard lie.
-
-## 28-day dashboard window
-
-`GET /api/state` includes a rolling 28-day dashboard window.
-
-The window contains:
-
-* `startDay`
-* `endDay`
-* normalized `days`
-* summary `cards`
-* `coverage`
-* warnings
-
-Missing days are represented explicitly with:
-
-```ts
-{
-  isGap: true,
-  metrics: null
-}
-```
-
-This lets charts and cards stay honest about incomplete data.
+Retention defaults are configured in `server/lib/runtime-config.ts` and exposed in `.env.example`.
 
 ## Validation
 
-Run the local verification commands before merging changes:
+Run these before merging changes:
 
 ```bash
-# Backend unit tests
 npm test
-
-# Frontend type check + build
-cd frontend && npx tsc --noEmit && npm run build
+cd frontend && npm run lint
+cd .. && npm run typecheck
+npm run build
 ```
 
-> The root `npm run typecheck` now runs `npx tsc --noEmit` from the frontend workspace.
-
-Use the repo's actual scripts as the source of truth. If a script is missing or fails for environmental reasons, document that clearly.
-
-## Running as a local service
-
-Signal House is intended to run as a persistent local Node service on the machine that hosts Clawd. It can be bound to the LAN when needed, but LAN exposure should be treated as untrusted until optional protection is enabled.
-
-A typical production run is:
+## Production Run
 
 ```bash
 cd frontend
@@ -441,147 +201,24 @@ npm run build
 npm run start -- --hostname 0.0.0.0 --port 8999
 ```
 
-### Systemd user service
+If exposing the dashboard on LAN, set `SECRET_HOUSE_ACCESS_PASSWORD` and configure host firewall rules for port `8999`.
 
-The project ships a user-level systemd unit at `~/.config/systemd/user/clawd-signal-house.service`:
+## Repo Layout
 
-```ini
-[Unit]
-Description=Clawd Signal House
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=/home/openclaw/projects/barkley-clawd/signal-house/frontend
-EnvironmentFile=%h/.config/clawd/signal-house.env
-Environment=NODE_ENV=production
-Environment=PATH=/home/openclaw/.nvm/versions/node/v24.16.0/bin:/usr/bin:/bin
-Environment=PORT=8999
-Environment=HOST=0.0.0.0
-ExecStart=/home/openclaw/.nvm/versions/node/v24.16.0/bin/npm run start -- --hostname 0.0.0.0 --port 8999
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-```
-
-Manage it:
-
-```bash
-systemctl --user daemon-reload
-systemctl --user restart clawd-signal-house.service
-systemctl --user status clawd-signal-house.service
-journalctl --user -u clawd-signal-house.service -f
-```
-
-## Firewall note
-
-If the dashboard should be available on the LAN, allow port `8999` and set `SECRET_HOUSE_ACCESS_PASSWORD` to enable the optional protection gate.
-
-```bash
-# firewalld
-sudo firewall-cmd --add-port=8999/tcp --permanent
-sudo firewall-cmd --reload
-
-# iptables
-sudo iptables -A INPUT -p tcp --dport 8999 -j ACCEPT
-```
-
-## Design principles
-
-Signal House should be:
-
-* fast to read
-* honest about uncertainty
-* compact without hiding important failures
-* boring operationally
-* useful before it is pretty
-* specific to Clawd/OpenClaw, not generic
-
-Avoid:
-
-* vanity metrics
-* fake precision
-* decorative charts
-* dashboards that require interpretation archaeology
-* abstractions added before the local workflow proves they are needed
-
-## Optional LAN protection
-
-By default, Signal House stays local-first and does not require any extra setup. If you bind it to the LAN or open the firewall, the app and local API become reachable from other devices on the network. That is useful for a trusted home or lab network, but it is not safe to treat as public access.
-
-You can enable a lightweight shared-secret gate with two env vars:
-
-```bash
-SECRET_HOUSE_ACCESS_USERNAME=signal-house
-SECRET_HOUSE_ACCESS_PASSWORD=choose-a-long-random-password
-```
-
-When enabled, requests must use HTTP Basic auth with those credentials. This protects the dashboard, API routes, and built-in server assets. It does not add users, sessions, roles, OAuth, or any multi-user account system.
-
-What is protected:
-
-* the dashboard pages
-* `/api/state`
-* `/api/diagnostics`
-* `/api/refresh`
-
-What is not protected:
-
-* your network transport
-* the host machine itself
-* any reverse proxy or firewall you put in front of Signal House
-
-## Repo layout
-
-```
+```text
 /
-├── server/            Backend modules (DB, collectors, refresh runner)
-│   ├── db/            SQLite database layer (client, schema, migrations)
-│   ├── lib/           Business logic (collectors, dashboard state, diagnostics)
-│   ├── plugins/       Server startup hooks (poller, DB init)
-│   └── middleware/     Server middleware (access protection)
-├── frontend/          Next.js dashboard application
-│   ├── src/app/       App Router pages and API routes
-│   ├── src/components/ React components
-│   ├── src/store/     Zustand state management
-│   ├── src/lib/       API client and utilities
-│   └── src/types/     TypeScript type definitions (re-exported from root types/)
-├── types/             Shared TypeScript type definitions
-├── .data/             SQLite database directory (gitignored)
-
-└── frontend/README.md  Boilerplate from create-next-app (not actively maintained)
+├── server/        Backend modules: DB, collectors, refresh runner, plugins
+├── frontend/      Next.js dashboard app
+├── types/         Shared TypeScript types
+├── utils/         Shared utilities
+├── docs/          Project docs
+├── skills/        Local agent guidance
+├── assets/        Static project assets
+└── .data/         Local SQLite runtime data, gitignored
 ```
 
-## Current boundaries
+## Boundaries
 
-Signal House does not try to solve everything.
+Signal House intentionally does not provide alerting, multi-user access control, deployment tracking, forecasting, deep drill-down pages, complete cross-repo analytics, or long-term warehouse storage.
 
-It does not currently provide:
-
-* alerting
-* multi-user access control
-* deployment tracking
-* forecasting
-* deep drill-down pages
-* complete cross-repo analytics
-* perfect session instrumentation
-* long-term data warehouse storage
-
-Those can come later if they become useful. For now, Signal House should stay small, local, and operationally sharp.
-
-## Development rule
-
-When adding a metric, ask:
-
-> What decision does this help the operator make?
-
-If the answer is unclear, do not add the metric yet.
-
-## License
-
-Signal House is licensed under the MIT License.
+When adding a metric, ask: what decision does this help the operator make? If the answer is unclear, do not add it yet.

@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
-import { initDb, getRefreshRunState, getNormalizedSnapshot } from "../../../../../server/db/client";
+import { getRefreshRunState, getNormalizedSnapshot } from "../../../../../server/db/client";
 import { buildDiagnostics } from "../../../../../server/lib/build-diagnostics";
-
-let dbInitialized = false;
-
-async function ensureDb(): Promise<void> {
-  if (!dbInitialized) {
-    await initDb();
-    dbInitialized = true;
-  }
-}
+import { ensureDb } from "../_lib/ensure-db";
 
 export async function GET() {
   try {

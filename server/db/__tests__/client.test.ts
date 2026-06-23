@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { initDb, getLatestState, close, setRefreshRunState, getRefreshRunState, persistSnapshot, getDbPath } from '../client'
+import { initDb, getLatestState, close, setRefreshInProgress, getRefreshInProgress, resetRefreshLock, setRefreshRunState, getRefreshRunState, persistSnapshot, getDbPath } from '../client'
 import type { MetricSnapshot } from '../../../types/snapshot'
 
 let tmpDir: string
@@ -86,6 +86,80 @@ describe('initDb on fresh database', () => {
 
     const latestState = getLatestState()
     expect(latestState.refreshState.runHistory).toHaveLength(10)
+  })
+
+  it('clears stale refresh lock when last run state is already finished', async () => {
+    await initDb()
+
+    setRefreshRunState({
+      startedAt: '2026-06-15T10:00:00.000Z',
+      finishedAt: '2026-06-15T10:00:30.000Z',
+      durationMs: 30000,
+      success: true,
+      partialData: false,
+      sources: ['github'],
+      errorSummary: null,
+      skipped: false,
+      skippedReason: null,
+    })
+    setRefreshInProgress(true)
+
+    expect(getRefreshInProgress()).toBe(false)
+    expect(getLatestState().refreshInProgress).toBe(false)
+  })
+
+  it('clears stale refresh lock when running state already has finished timestamp', async () => {
+    await initDb()
+
+    setRefreshRunState({
+      startedAt: '2026-06-15T10:00:00.000Z',
+      finishedAt: '2026-06-15T10:00:30.000Z',
+      durationMs: 30000,
+      success: true,
+      partialData: false,
+      sources: ['github'],
+      errorSummary: null,
+      skipped: false,
+      skippedReason: null,
+    })
+    setRefreshInProgress(true)
+    const runState = getRefreshRunState()
+    const db = await initDb()
+    db.prepare(`UPDATE latest_state SET value = ? WHERE key = 'refresh_state'`).run(JSON.stringify({
+      ...runState,
+      status: 'running',
+    }))
+
+    expect(getRefreshInProgress()).toBe(false)
+    expect(getLatestState().refreshInProgress).toBe(false)
+  })
+
+  it('force resets running refresh lock and marks running state skipped', async () => {
+    await initDb()
+    setRefreshInProgress(true)
+    const db = await initDb()
+    db.prepare(`INSERT INTO latest_state (key, value) VALUES ('refresh_state', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify({
+      status: 'running',
+      lastRunStartedAt: '2026-06-15T10:00:00.000Z',
+      lastRunFinishedAt: null,
+      lastSuccessAt: null,
+      lastFailureAt: null,
+      nextRunAt: null,
+      lastError: null,
+      durationMs: null,
+      sourceHealth: {},
+      runHistory: [],
+    }))
+
+    const result = resetRefreshLock('test reset')
+
+    expect(result.wasLocked).toBe(true)
+    expect(result.previousStatus).toBe('running')
+    expect(getRefreshInProgress()).toBe(false)
+    const runState = getRefreshRunState()
+    expect(runState.status).toBe('skipped')
+    expect(runState.lastError).toBe('test reset')
+    expect(runState.lastRunFinishedAt).toBeTruthy()
   })
 
   it('includes discovery warnings in local source health', async () => {

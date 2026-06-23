@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
 import { HealthSignalCard } from "@/components/HealthSignalCard";
@@ -23,11 +23,9 @@ import { StatusStrip, formatTimeAgo } from "@/components/StatusStrip";
 import { ModelUsageRankList } from "@/components/ModelUsageRankList";
 import { TrendCard } from "@/components/TrendCard";
 import type {
+  DashboardAttentionItem,
   DashboardWindowCards,
   DashboardWindowDay,
-  DashboardWindowSessionUsageSummary,
-  IssueMetric,
-  PullRequestMetric,
 } from "@/types";
 import type { EChartsOption } from "echarts-for-react";
 
@@ -53,80 +51,7 @@ type TypeFilter = "issues" | "prs" | "all";
 type ConditionFilter = "stale" | "blocked" | "failing" | "all";
 type SortMode = "oldest" | "urgent";
 
-type AttentionItem = {
-  id: string;
-  kind: "issue" | "pr";
-  title: string;
-  repo: string;
-  ageDays: number;
-  priorityTier: "stale" | "ci-failing" | "ci-blocked" | "ci-pending";
-  statusLabel: string;
-};
-
-const STALE_THRESHOLD_DAYS_FALLBACK = 14;
-
-function daysSince(iso: string | null | undefined, nowMs: number): number {
-  if (!iso) return 0;
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return 0;
-  return Math.max(0, Math.floor((nowMs - ts) / (1000 * 60 * 60 * 24)));
-}
-
-function deriveAttentionItems(
-  issues: IssueMetric[],
-  pullRequests: PullRequestMetric[],
-  nowMs: number,
-  staleThresholdDays: number,
-): AttentionItem[] {
-  const items: AttentionItem[] = [];
-
-  for (const issue of issues) {
-    if (issue.state !== "open") continue;
-    const ageDays = daysSince(issue.updatedAt, nowMs);
-    const isStale = ageDays >= staleThresholdDays;
-    items.push({
-      id: `issue-${issue.id}`,
-      kind: "issue",
-      title: issue.title,
-      repo: issue.repoKey,
-      ageDays,
-      priorityTier: isStale ? "stale" : "ci-pending",
-      statusLabel: isStale ? "Stale" : "Active",
-    });
-  }
-
-  for (const pr of pullRequests) {
-    if (pr.state !== "open") continue;
-    const ageDays = daysSince(pr.updatedAt, nowMs);
-    const isStale = ageDays >= staleThresholdDays;
-    let priorityTier: AttentionItem["priorityTier"];
-    let statusLabel: string;
-    if (pr.ciStatus === "failure") {
-      priorityTier = "ci-failing";
-      statusLabel = "CI failing";
-    } else if (pr.ciStatus === "pending") {
-      priorityTier = isStale ? "stale" : "ci-pending";
-      statusLabel = isStale ? "Stale" : "CI pending";
-    } else if (isStale) {
-      priorityTier = "stale";
-      statusLabel = "Stale";
-    } else {
-      priorityTier = "ci-pending";
-      statusLabel = "Active";
-    }
-    items.push({
-      id: `pr-${pr.id}`,
-      kind: "pr",
-      title: pr.title,
-      repo: pr.repoKey,
-      ageDays,
-      priorityTier,
-      statusLabel,
-    });
-  }
-
-  return items;
-}
+type AttentionItem = DashboardAttentionItem;
 
 function throughputStatus(status: string | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
   if (!status) return "unknown";
@@ -418,11 +343,11 @@ function computeCIFooter(days: DashboardWindowDay[]): string {
 }
 
 export default function Home() {
+  const shouldReduceMotion = useReducedMotion();
   const {
     data,
     isLoading,
     error,
-    selectedRepoKey,
     hasEverLoaded,
     manualRefreshStatus,
     manualRefreshErrorTimestamp,
@@ -473,24 +398,9 @@ export default function Home() {
     isEmpty: !data && hasEverLoaded,
   });
 
-  const snapshotIssues = useMemo<IssueMetric[]>(
-    () => data?.snapshot?.issues ?? [],
-    [data],
-  );
-
-  const snapshotPullRequests = useMemo<PullRequestMetric[]>(
-    () => data?.snapshot?.pullRequests ?? [],
-    [data],
-  );
-
-  const staleThresholdDays = useMemo<number>(
-    () => data?.snapshot?.aggregates?.staleWork?.staleThresholdDays ?? STALE_THRESHOLD_DAYS_FALLBACK,
-    [data],
-  );
-
   const attentionItems = useMemo<AttentionItem[]>(
-    () => deriveAttentionItems(snapshotIssues, snapshotPullRequests, now, staleThresholdDays),
-    [snapshotIssues, snapshotPullRequests, now, staleThresholdDays],
+    () => data?.attention.items ?? [],
+    [data],
   );
 
   const filteredItems = useMemo(() => {
@@ -507,18 +417,21 @@ export default function Home() {
     return result.slice(0, 20);
   }, [attentionItems, conditionFilter, sortMode, typeFilter]);
 
-  const isFiltered = typeFilter !== "all" || conditionFilter !== "all" || sortMode !== "urgent";
-
   const attentionState = useSectionState({
     isLoading: !hasEverLoaded && isLoading,
     error,
-    isEmpty: filteredItems.length === 0 && !isFiltered,
+    isEmpty: filteredItems.length === 0,
   });
 
-  const tokenUsage = useMemo(() => data?.snapshot?.aggregates?.tokenUsage ?? null, [data]);
+  const tokenUsage = useMemo(() => data?.usage.tokenUsage ?? null, [data]);
 
   const cards = useMemo<DashboardWindowCards | null>(
-    () => data?.dashboardWindow?.cards ?? null,
+    () => data?.summary ?? null,
+    [data],
+  );
+  const monitoredProjectCount = useMemo(
+    () =>
+      data?.diagnostics.discoveredRepos.length ?? 0,
     [data],
   );
 
@@ -539,7 +452,54 @@ export default function Home() {
       <nav aria-label="Dashboard controls">
         <header className="mb-8">
           <div className="flex items-center gap-4">
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden">
+          <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+            <div
+              className="pointer-events-none absolute h-16 w-16 rounded-full border"
+              style={{
+                borderColor: "rgba(56, 189, 248, 0.28)",
+                backgroundColor: "rgba(56, 189, 248, 0.045)",
+              }}
+              aria-hidden="true"
+            />
+            {[0, 2.1, 4.2].map((delay, index) => (
+              <motion.span
+                key={delay}
+                aria-hidden="true"
+                className="pointer-events-none absolute h-16 w-16 rounded-full border"
+                style={{
+                  borderColor: `rgba(56, 189, 248, ${index === 0 ? 0.56 : 0.42})`,
+                  backgroundColor: "rgba(56, 189, 248, 0.035)",
+                }}
+                initial={
+                  shouldReduceMotion
+                    ? { scale: 1.08, opacity: index === 0 ? 0.32 : 0.18 }
+                    : { scale: 1, opacity: 0 }
+                }
+                animate={
+                  shouldReduceMotion
+                    ? { scale: 1.08, opacity: index === 0 ? 0.32 : 0.18 }
+                    : { scale: [1, 2.08], opacity: [0, 0.52, 0] }
+                }
+                transition={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        duration: 6.3,
+                        delay,
+                        repeat: Infinity,
+                        repeatDelay: 0.4,
+                        times: [0, 0.18, 1],
+                        ease: "easeOut",
+                      }
+                }
+              />
+            ))}
+<motion.div
+              className="relative h-16 w-16 overflow-hidden rounded-full"
+              initial="idle"
+              whileHover="lit"
+              whileFocus="lit"
+            >
               <Image
                 src="/signal-house-logo.png"
                 alt="Signal House logo"
@@ -548,7 +508,44 @@ export default function Home() {
                 sizes="64px"
                 className="object-contain"
               />
-            </div>
+              <motion.div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-[38%] h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle, rgba(241, 250, 255, 0.92) 0%, rgba(125, 211, 252, 0.58) 24%, rgba(56, 189, 248, 0.22) 52%, rgba(56, 189, 248, 0) 76%)",
+                  mixBlendMode: "screen",
+                }}
+                variants={{
+                  idle: { opacity: 0, scale: 0.45 },
+                  lit: shouldReduceMotion
+                    ? { opacity: 0.74, scale: 1 }
+                    : { opacity: [0, 0.86, 0.72], scale: [0.45, 1.1, 1] },
+                }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : { duration: 0.42, ease: "easeOut" }
+                }
+              />
+              <motion.div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-[38%] h-3 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full blur-sm"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(56, 189, 248, 0), rgba(186, 230, 253, 0.62), rgba(56, 189, 248, 0))",
+                  mixBlendMode: "screen",
+                }}
+                variants={{
+                  idle: { opacity: 0, scaleX: 0.35 },
+                  lit: shouldReduceMotion
+                    ? { opacity: 0.44, scaleX: 1 }
+                    : { opacity: [0, 0.5, 0.38], scaleX: [0.35, 1.08, 1] },
+                }}
+                transition={
+                  shouldReduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeOut" }
+                }
+              />
+            </motion.div>
+          </div>
             <div>
               <h1
                 className="text-3xl font-bold tracking-tight text-text-primary"
@@ -685,7 +682,7 @@ export default function Home() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {data?.isStale && !staleBannerDismissed && (
+        {data?.status.isStale && !staleBannerDismissed && (
           <motion.div
             key="stale-banner"
             role="alert"
@@ -697,7 +694,7 @@ export default function Home() {
           >
             <div className="flex items-center justify-between px-4 py-2 text-sm">
               <span style={{ color: "var(--color-status-warning)" }}>
-                {data.staleReason ?? "Dashboard data may be stale — last successful refresh was more than 2 minutes ago"}
+              {data.status.staleReason ?? "Dashboard data may be stale — last successful refresh was more than 2 minutes ago"}
               </span>
               <button
                 type="button"
@@ -712,29 +709,31 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <section aria-label="Repository and status" className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-text-primary">
-              Repository
-              <Badge variant="secondary" className="text-xs">
-                {selectedRepoKey}
-              </Badge>
-            </CardTitle>
-            <CardDescription>Current repository context</CardDescription>
-          </CardHeader>
-          <CardContent>
+    <section aria-label="Monitored projects and status" className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-text-primary">
+            Monitored Projects
+            <Badge variant="secondary" className="text-xs">
+              {monitoredProjectCount}
+            </Badge>
+          </CardTitle>
+          <CardDescription>Configured folders and tracked repositories</CardDescription>
+        </CardHeader>
+        <CardContent>
             <SectionState
               state={repoState}
               section="health"
               errorMessage={error ?? undefined}
               onRetry={() => fetch()}
               minHeight="24px"
-            >
-              <p className="text-sm text-text-secondary">Data loaded</p>
-            </SectionState>
-          </CardContent>
-        </Card>
+          >
+            <p className="text-sm text-text-secondary">
+              Aggregate view across all discovered projects
+            </p>
+          </SectionState>
+        </CardContent>
+      </Card>
 
         <Card className="border-card-border bg-card-bg transition-colors hover:bg-card-hover">
           <CardHeader>
@@ -749,12 +748,12 @@ export default function Home() {
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Last refresh</span>
-              <span className="text-sm text-text-muted">{data?.lastRefreshAt ? formatTimeAgo(data.lastRefreshAt, now) : "Never"}</span>
+              <span className="text-sm text-text-muted">{data?.status.lastRefreshAt ? formatTimeAgo(data.status.lastRefreshAt, now) : "Never"}</span>
             </div>
             <Separator className="bg-divider" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-text-secondary">Last success</span>
-              <span className="text-sm text-text-muted">{data?.lastSuccessfulRefreshAt ? formatTimeAgo(data.lastSuccessfulRefreshAt, now) : "—"}</span>
+              <span className="text-sm text-text-muted">{data?.status.lastSuccessfulRefreshAt ? formatTimeAgo(data.status.lastSuccessfulRefreshAt, now) : "—"}</span>
             </div>
           </CardContent>
         </Card>
@@ -826,7 +825,7 @@ export default function Home() {
 
       <section aria-label="Trend charts" className="mt-6">
         {(() => {
-          const days = data?.dashboardWindow?.days ?? [];
+          const days = data?.window.days ?? [];
           const trendLoading = !hasEverLoaded && isLoading;
           const trendEmpty = days.length === 0;
           const throughputOption = trendEmpty ? null : buildThroughputOption(days);
@@ -867,8 +866,8 @@ export default function Home() {
       </section>
 
       {(() => {
-        const coverage = data?.dashboardWindow?.coverage;
-        const warnings = data?.dashboardWindow?.warnings ?? [];
+        const coverage = data?.window.coverage;
+        const warnings = data?.window.warnings ?? [];
         const hasCoverage = coverage && (coverage.missingDays > 0 || !coverage.isComplete);
         if (!hasCoverage && warnings.length === 0) return null;
         return (
@@ -961,9 +960,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {!isFiltered ? null : (
-                <p className="text-base text-text-muted">Filters are active.</p>
-              )}
             </div>
 
             <SectionState
@@ -974,12 +970,7 @@ export default function Home() {
               minHeight="200px"
             >
               <div className="space-y-2">
-                {filteredItems.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-base text-text-muted">
-                    No items match this filter. Try broadening your filter.
-                  </p>
-                ) : (
-                  filteredItems.map((item) => (
+                {filteredItems.map((item) => (
                     <div
                       key={item.id}
                       className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
@@ -999,8 +990,7 @@ export default function Home() {
                         </Badge>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
               </div>
             </SectionState>
           </CardContent>

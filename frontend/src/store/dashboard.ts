@@ -1,15 +1,14 @@
 import { create } from "zustand";
-import { fetchState, fetchDiagnostics } from "@/lib/api-client";
-import type { LatestState, SourceDiagnostics } from "@/types";
+import { fetchDiagnostics, fetchState, resetRefreshLock, triggerRefresh } from "@/lib/api-client";
+import type { DashboardStateResponse, SourceDiagnostics } from "@/types";
 
 export type RefreshStatus = "idle" | "running" | "success" | "failed";
 
 export interface DashboardState {
-  data: LatestState | null;
+  data: DashboardStateResponse | null;
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
-  selectedRepoKey: string;
   hasEverLoaded: boolean;
   lastRefreshAt: string | null;
   lastSuccessfulRefreshAt: string | null;
@@ -17,20 +16,26 @@ export interface DashboardState {
   manualRefreshStatus: RefreshStatus;
   manualRefreshErrorTimestamp: number | null;
   lastPollTimestamp: string | null;
-
-  fetch: (repoKey?: string) => Promise<void>;
+  fetch: () => Promise<void>;
   diagnostics: SourceDiagnostics | null;
   diagnosticsLoading: boolean;
   diagnosticsError: string | null;
   diagnosticsHasLoaded: boolean;
-
   manualRefresh: () => Promise<void>;
   triggerAutoRefresh: () => Promise<void>;
   clearManualRefreshError: () => void;
   loadDiagnostics: () => Promise<void>;
+  resetRefreshLock: () => Promise<void>;
 }
 
 type FetchKind = "manual" | "polled";
+
+const MANUAL_REFRESH_POLL_INTERVAL_MS = 2_000;
+const MANUAL_REFRESH_TIMEOUT_MS = 5 * 60_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function startFetchFlags(isFirstLoad: boolean) {
   return isFirstLoad
@@ -38,9 +43,18 @@ function startFetchFlags(isFirstLoad: boolean) {
     : { isRefreshing: true, refreshStatus: "running" as const };
 }
 
+function refreshIsRunning(data: DashboardStateResponse): boolean {
+  return data.status.refreshInProgress || data.status.refreshState.status === "running";
+}
+
+function refreshFinishedAfter(data: DashboardStateResponse, previousFinishedAt: string | null): boolean {
+  const finishedAt = data.status.refreshState.lastRunFinishedAt;
+  return Boolean(finishedAt && finishedAt !== previousFinishedAt);
+}
+
 function applyFetchedState(
   state: DashboardState,
-  data: LatestState,
+  data: DashboardStateResponse,
   kind: FetchKind,
 ) {
   return {
@@ -48,15 +62,40 @@ function applyFetchedState(
     isLoading: false,
     isRefreshing: false,
     hasEverLoaded: true,
-    selectedRepoKey: data.selectedRepoKey,
     lastRefreshAt: new Date().toISOString(),
-    lastSuccessfulRefreshAt: data.lastSuccessfulRefreshAt,
+    lastSuccessfulRefreshAt: data.status.lastSuccessfulRefreshAt,
     refreshStatus: "success" as const,
     manualRefreshStatus:
       kind === "manual" ? ("success" as const) : state.manualRefreshStatus,
     error: null,
     diagnostics: state.diagnosticsHasLoaded ? state.diagnostics : data.diagnostics,
     diagnosticsHasLoaded: state.diagnosticsHasLoaded || Boolean(data.diagnostics),
+  };
+}
+
+function applyPolledStateDuringManualRefresh(state: DashboardState, data: DashboardStateResponse) {
+  return {
+    ...applyFetchedState(state, data, "polled"),
+    isRefreshing: true,
+    refreshStatus: "running" as const,
+    manualRefreshStatus: "running" as const,
+  };
+}
+
+function applyFinalManualRefreshState(state: DashboardState, data: DashboardStateResponse) {
+  const refreshFailed =
+    data.status.refreshState.status === "failed" || data.status.refreshState.status === "skipped";
+
+  if (!refreshFailed) {
+    return applyFetchedState(state, data, "manual");
+  }
+
+  return {
+    ...applyFetchedState(state, data, "polled"),
+    refreshStatus: "failed" as const,
+    manualRefreshStatus: "failed" as const,
+    manualRefreshErrorTimestamp: Date.now(),
+    error: data.status.refreshState.lastError ?? "Refresh failed",
   };
 }
 
@@ -69,12 +108,12 @@ function applyFetchError(
   return {
     isLoading: false,
     isRefreshing: false,
-    error: message,
     refreshStatus: "failed" as const,
     manualRefreshStatus:
       kind === "manual" ? ("failed" as const) : state.manualRefreshStatus,
     manualRefreshErrorTimestamp:
       kind === "manual" ? Date.now() : state.manualRefreshErrorTimestamp,
+    error: message,
   };
 }
 
@@ -83,7 +122,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   isLoading: false,
   isRefreshing: false,
   error: null,
-  selectedRepoKey: "barkley-clawd/signal-house",
   hasEverLoaded: false,
   lastRefreshAt: null,
   lastSuccessfulRefreshAt: null,
@@ -96,12 +134,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   diagnosticsError: null,
   diagnosticsHasLoaded: false,
 
-  fetch: async (repoKey) => {
+  fetch: async () => {
     const state = get();
-    const repo = repoKey ?? state.selectedRepoKey;
     set({ ...startFetchFlags(!state.hasEverLoaded), error: null });
     try {
-      const data = await fetchState(repo);
+      const data = await fetchState();
       set((s) => applyFetchedState(s, data, "polled"));
     } catch (err) {
       set((s) => applyFetchError(s, err, "polled"));
@@ -110,14 +147,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   manualRefresh: async () => {
     const state = get();
+      const previousFinishedAt = state.data?.status.refreshState.lastRunFinishedAt ?? null;
+    const startedAt = Date.now();
+
     set({
       ...startFetchFlags(!state.hasEverLoaded),
       error: null,
       manualRefreshStatus: "running",
     });
+
     try {
-      const data = await fetchState(state.selectedRepoKey);
-      set((s) => applyFetchedState(s, data, "manual"));
+      await triggerRefresh();
+
+      while (Date.now() - startedAt < MANUAL_REFRESH_TIMEOUT_MS) {
+        const data = await fetchState();
+
+        if (!refreshIsRunning(data) && refreshFinishedAfter(data, previousFinishedAt)) {
+          set((s) => applyFinalManualRefreshState(s, data));
+          return;
+        }
+
+        set((s) => applyPolledStateDuringManualRefresh(s, data));
+        await sleep(MANUAL_REFRESH_POLL_INTERVAL_MS);
+      }
+
+      throw new Error("Refresh did not complete before the timeout");
     } catch (err) {
       set((s) => applyFetchError(s, err, "manual"));
     }
@@ -127,8 +181,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const state = get();
     try {
       set({ refreshStatus: "running" });
-      const data = await fetchState(state.selectedRepoKey);
-      const apiLastRefreshAt = data.lastSuccessfulRefreshAt;
+      const data = await fetchState();
+        const apiLastRefreshAt = data.status.lastSuccessfulRefreshAt;
 
       if (apiLastRefreshAt && apiLastRefreshAt !== state.lastPollTimestamp) {
         set((s) => ({
@@ -158,6 +212,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         diagnosticsHasLoaded: true,
         diagnosticsError: null,
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({
+        diagnosticsLoading: false,
+        diagnosticsHasLoaded: true,
+        diagnosticsError: message,
+      });
+    }
+  },
+
+  resetRefreshLock: async () => {
+    set({ diagnosticsLoading: true, diagnosticsError: null });
+    try {
+      await resetRefreshLock();
+      const [data, diagnostics] = await Promise.all([fetchState(), fetchDiagnostics()]);
+      set((s) => ({
+        ...applyFetchedState(s, data, "polled"),
+        diagnostics,
+        diagnosticsLoading: false,
+        diagnosticsHasLoaded: true,
+        diagnosticsError: null,
+        refreshStatus: "idle",
+        manualRefreshStatus: "idle",
+        manualRefreshErrorTimestamp: null,
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({

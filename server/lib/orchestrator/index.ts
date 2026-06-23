@@ -1,35 +1,53 @@
-import { createCollector as createGitHubCollector, collectWithConcurrency } from '../github/collector'
-import { createLocalGitCollector } from '../git/collector'
-import { createSessionCollector } from '../sessions/collector'
-import { collectTokenUsageSnapshot } from '../opencode/collector'
-import { deriveAll } from '../github/aggregates'
-import { initDb, persistSnapshot } from '../../db/client'
 import { randomUUID } from 'node:crypto'
-import { getRuntimeConfig } from '../runtime-config'
-import type { GitHubCollectorConfig } from '../github/types'
-import type { LocalGitCollectorConfig, LocalGitRepoInfo } from '../git/types'
-import type { SessionCollectorConfig } from '../sessions/types'
-import type { OrchestratorConfig, OrchestratorResult } from './types'
-import type { MetricSnapshot } from '../../../types/snapshot'
-import type { DashboardAggregates } from '../../../types/aggregates'
+import { initDb, persistSnapshot } from '../../db/client'
+import type { DashboardAggregates, SessionUsageAggregate, TokenUsageAggregate } from '../../../types/aggregates'
 import type {
+  ErrorMetric,
   IssueMetric,
+  LocalGitRepoMetric,
   PullRequestMetric,
-  WorkflowRunMetric,
   RepositoryIdentity,
   RepositoryMetric,
   SessionMetric,
-  LocalGitRepoMetric,
-  ErrorMetric,
+  WorkflowRunMetric,
 } from '../../../types/metrics'
+import type { MetricSnapshot } from '../../../types/snapshot'
+import { createLocalGitCollector } from '../git/collector'
+import type { LocalGitRepoInfo } from '../git/types'
+import { deriveAll } from '../github/aggregates'
+import { collectWithConcurrency, createCollector as createGitHubCollector } from '../github/collector'
+import { collectTokenUsageSnapshot } from '../opencode/collector'
+import { getRuntimeConfig } from '../runtime-config'
+import { createSessionCollector } from '../sessions/collector'
+import type { OrchestratorConfig, OrchestratorResult } from './types'
 
-function mergeSource(a: RepositoryIdentity['source'], b: RepositoryIdentity['source']): RepositoryIdentity['source'] {
+interface SourceTaskResult {
+  source: string
+  issues?: IssueMetric[]
+  pullRequests?: PullRequestMetric[]
+  workflowRuns?: WorkflowRunMetric[]
+  repositories?: RepositoryIdentity[]
+  sessions?: SessionMetric[]
+  localGit?: LocalGitRepoMetric[]
+  sessionUsage?: SessionUsageAggregate | null
+  tokenUsage?: TokenUsageAggregate | null
+  errors: string[]
+}
+
+function mergeSource(
+  a: RepositoryIdentity['source'],
+  b: RepositoryIdentity['source'],
+): RepositoryIdentity['source'] {
   if (a === b) return a
   return 'both'
 }
 
-function mergeIdentity(existing: RepositoryIdentity | undefined, next: RepositoryIdentity): RepositoryIdentity {
+function mergeIdentity(
+  existing: RepositoryIdentity | undefined,
+  next: RepositoryIdentity,
+): RepositoryIdentity {
   if (!existing) return next
+
   return {
     repoKey: existing.repoKey,
     name: existing.name || next.name,
@@ -39,6 +57,18 @@ function mergeIdentity(existing: RepositoryIdentity | undefined, next: Repositor
     githubRepo: existing.githubRepo ?? next.githubRepo,
     source: mergeSource(existing.source, next.source),
   }
+}
+
+function dedupeRepositories(repositories: RepositoryIdentity[]): RepositoryIdentity[] {
+  return repositories.reduce<RepositoryIdentity[]>((acc, repo) => {
+    const existing = acc.find((item) => item.repoKey === repo.repoKey)
+    if (!existing) {
+      acc.push(repo)
+      return acc
+    }
+
+    return acc.map((item) => item.repoKey === repo.repoKey ? mergeIdentity(item, repo) : item)
+  }, [])
 }
 
 function toLocalGitRepoMetric(info: LocalGitRepoInfo): LocalGitRepoMetric {
@@ -63,7 +93,7 @@ function toLocalGitRepoMetric(info: LocalGitRepoInfo): LocalGitRepoMetric {
 function toRepositoryMetric(info: LocalGitRepoInfo): RepositoryIdentity {
   return {
     repoKey: info.repoKey,
-    name: info.githubRepo ?? info.repoName,
+    name: info.repoName,
     localPath: info.path,
     remoteUrl: info.remoteUrl,
     githubOwner: info.githubOwner,
@@ -72,15 +102,137 @@ function toRepositoryMetric(info: LocalGitRepoInfo): RepositoryIdentity {
   }
 }
 
-function normalizeRepositoryMetric(info: RepositoryIdentity): RepositoryIdentity {
+function normalizeRepositoryMetric(repo: RepositoryIdentity | RepositoryMetric): RepositoryIdentity {
   return {
-    repoKey: info.repoKey,
-    name: info.name,
-    localPath: info.localPath,
-    remoteUrl: info.remoteUrl,
-    githubOwner: info.githubOwner,
-    githubRepo: info.githubRepo,
-    source: info.source,
+    repoKey: repo.repoKey,
+    name: repo.name,
+    localPath: repo.localPath,
+    remoteUrl: repo.remoteUrl,
+    githubOwner: repo.githubOwner,
+    githubRepo: repo.githubRepo,
+    source: repo.source,
+  }
+}
+
+function fallbackAggregates(
+  capturedAt: string,
+  localGit: LocalGitRepoMetric[],
+  sessionUsage: SessionUsageAggregate | null,
+  tokenUsage: TokenUsageAggregate | null,
+): DashboardAggregates {
+  const runtimeConfig = getRuntimeConfig()
+  const now = new Date()
+  const periodStart = new Date(now.getTime() - runtimeConfig.orchestrator.githubLookbackDays * 24 * 60 * 60 * 1000).toISOString()
+
+  return {
+    throughput: {
+      periodStart,
+      periodEnd: capturedAt,
+      issuesClosed: 0,
+      issuesOpened: 0,
+      prsMerged: 0,
+      prsCreated: 0,
+      totalCommits: localGit.reduce((sum, repo) => sum + repo.recentCommits, 0),
+    },
+    cycleTime: null,
+    ci: null,
+    staleWork: {
+      asOf: capturedAt,
+      staleIssues: 0,
+      stalePRs: 0,
+      staleThresholdDays: runtimeConfig.orchestrator.staleThresholdDays,
+      oldestItemDays: null,
+    },
+    sessionUsage,
+    tokenUsage,
+    computedAt: capturedAt,
+  }
+}
+
+async function collectGitHub(config: OrchestratorConfig): Promise<SourceTaskResult | null> {
+  if (!config.github || config.github.length === 0) return null
+
+  const runtimeConfig = getRuntimeConfig()
+  const ghResults = await collectWithConcurrency(
+    config.github,
+    runtimeConfig.orchestrator.collectConcurrency,
+    async (ghConfig) => {
+      const ghCollector = createGitHubCollector(ghConfig)
+      return await ghCollector.collect()
+    },
+  )
+
+  const result: SourceTaskResult = {
+    source: 'github',
+    issues: [],
+    pullRequests: [],
+    workflowRuns: [],
+    repositories: [],
+    errors: [],
+  }
+
+  for (const ghResult of ghResults) {
+    if (ghResult.snapshot) {
+      result.issues?.push(...ghResult.snapshot.issues)
+      result.pullRequests?.push(...ghResult.snapshot.pullRequests)
+      result.workflowRuns?.push(...ghResult.snapshot.workflowRuns)
+      result.repositories?.push(...ghResult.snapshot.repositories.map(normalizeRepositoryMetric))
+    }
+    result.errors.push(...ghResult.errors)
+  }
+
+  return result
+}
+
+async function collectLocalGit(config: OrchestratorConfig): Promise<SourceTaskResult | null> {
+  if (!config.localGit) return null
+
+  const gitCollector = createLocalGitCollector(config.localGit)
+  const gitResult = await gitCollector.collect()
+
+  return {
+    source: 'localGit',
+    repositories: gitResult.repos.map(toRepositoryMetric),
+    localGit: gitResult.repos.map(toLocalGitRepoMetric),
+    errors: gitResult.errors,
+  }
+}
+
+async function collectSessions(config: OrchestratorConfig): Promise<SourceTaskResult | null> {
+  if (!config.sessions) return null
+
+  const sessionCollector = createSessionCollector(config.sessions)
+  const sessionResult = await sessionCollector.collect()
+
+  return {
+    source: 'sessions',
+    sessions: sessionResult.sessions,
+    sessionUsage: sessionResult.sessionUsage,
+    errors: sessionResult.errors,
+  }
+}
+
+async function collectTokenUsage(): Promise<SourceTaskResult> {
+  const tokenResult = collectTokenUsageSnapshot()
+
+  return {
+    source: 'tokenUsage',
+    tokenUsage: tokenResult.errors.length > 0
+      ? null
+      : {
+        periodStart: tokenResult.periodStart,
+        periodEnd: tokenResult.periodEnd,
+        source: tokenResult.source,
+        toolName: tokenResult.toolName,
+        totalSessions: tokenResult.totalSessions,
+        totalMessages: tokenResult.totalMessages,
+        totalTokens: tokenResult.totalTokens,
+        totalCost: tokenResult.totalCost,
+        modelUsage: tokenResult.modelUsage,
+        rawJson: tokenResult.rawJson,
+        collectedAt: tokenResult.collectedAt,
+      },
+    errors: tokenResult.errors,
   }
 }
 
@@ -90,148 +242,80 @@ export function createOrchestrator(config: OrchestratorConfig) {
       const startTime = Date.now()
       const capturedAt = new Date().toISOString()
       const snapshotId = randomUUID()
-      const allErrors: string[] = []
-      const sources: string[] = []
-
-      let issues: IssueMetric[] = []
-      let pullRequests: PullRequestMetric[] = []
-      let workflowRuns: WorkflowRunMetric[] = []
-      let repositories: RepositoryIdentity[] = []
-      let sessions: SessionMetric[] = []
-      let localGit: LocalGitRepoMetric[] = []
-      let aggregates: DashboardAggregates | null = null
-      let sessionUsageFromCollector: import('../../../types/aggregates').SessionUsageAggregate | null = null
-      let tokenUsageFromCollector: import('../../../types/aggregates').TokenUsageAggregate | null = null
-
       const runtimeConfig = getRuntimeConfig()
 
-      // 1. GitHub collector
+      const taskResults = await Promise.allSettled([
+        collectGitHub(config),
+        collectLocalGit(config),
+        collectSessions(config),
+        collectTokenUsage(),
+      ])
+
+      const allErrors: string[] = []
+      const sources: string[] = []
+      const issues: IssueMetric[] = []
+      let pullRequests: PullRequestMetric[] = []
+      let workflowRuns: WorkflowRunMetric[] = []
+      const repositories: RepositoryIdentity[] = []
+      let sessions: SessionMetric[] = []
+      let localGit: LocalGitRepoMetric[] = []
+      let sessionUsageFromCollector: SessionUsageAggregate | null = null
+      let tokenUsageFromCollector: TokenUsageAggregate | null = null
+
+      for (const settled of taskResults) {
+        if (settled.status === 'rejected') {
+          allErrors.push(`Collector failed: ${settled.reason instanceof Error ? settled.reason.message : String(settled.reason)}`)
+          continue
+        }
+
+        const result = settled.value
+        if (!result) continue
+
+        sources.push(result.source)
+        issues.push(...(result.issues ?? []))
+        pullRequests = pullRequests.concat(result.pullRequests ?? [])
+        workflowRuns = workflowRuns.concat(result.workflowRuns ?? [])
+        repositories.push(...(result.repositories ?? []))
+        sessions = result.sessions ?? sessions
+        localGit = result.localGit ?? localGit
+
+        if (result.sessionUsage !== undefined) {
+          sessionUsageFromCollector = result.sessionUsage
+        }
+        if (result.tokenUsage !== undefined) {
+          tokenUsageFromCollector = result.tokenUsage
+        }
+
+        allErrors.push(...result.errors)
+      }
+
+      let aggregates: DashboardAggregates | null = null
       if (config.github && config.github.length > 0) {
-        sources.push('github')
-        try {
-          const ghResults = await collectWithConcurrency(config.github, runtimeConfig.orchestrator.collectConcurrency, async ghConfig => {
-            const ghCollector = createGitHubCollector(ghConfig)
-            return await ghCollector.collect()
-          })
-          for (const ghResult of ghResults) {
-            if (ghResult.snapshot) {
-              issues.push(...ghResult.snapshot.issues)
-              pullRequests.push(...ghResult.snapshot.pullRequests)
-              workflowRuns.push(...ghResult.snapshot.workflowRuns)
-              repositories.push(...ghResult.snapshot.repositories.map(normalizeRepositoryMetric))
-            }
-            allErrors.push(...ghResult.errors)
-          }
-        } catch (err) {
-          allErrors.push(`GitHub collector failed: ${err instanceof Error ? err.message : String(err)}`)
+        const deriveConfig = {
+          staleThresholdDays: runtimeConfig.orchestrator.staleThresholdDays,
+          lookbackDays: runtimeConfig.orchestrator.githubLookbackDays,
         }
-      }
-
-      // 2. Local git collector
-      if (config.localGit) {
-        sources.push('localGit')
-        try {
-          const gitCollector = createLocalGitCollector(config.localGit)
-          const gitResult = await gitCollector.collect()
-          const repoMetrics = gitResult.repos.map(toRepositoryMetric)
-          for (const repo of repoMetrics) {
-            const existing = repositories.find(item => item.repoKey === repo.repoKey)
-            const merged = mergeIdentity(existing, repo)
-            repositories = repositories.filter(item => item.repoKey !== repo.repoKey).concat([merged])
-          }
-          localGit = gitResult.repos.map(toLocalGitRepoMetric)
-          allErrors.push(...gitResult.errors)
-        } catch (err) {
-          allErrors.push(`Local git collector failed: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-
-      // 3. Session usage collector
-      if (config.sessions) {
-        sources.push('sessions')
-        try {
-          const sessionCollector = createSessionCollector(config.sessions)
-          const sessionResult = await sessionCollector.collect()
-          sessions = sessionResult.sessions
-          sessionUsageFromCollector = sessionResult.sessionUsage
-          if (sessionResult.gap) {
-            allErrors.push(sessionResult.gap)
-          }
-          allErrors.push(...sessionResult.errors)
-        } catch (err) {
-          allErrors.push(`Session collector failed: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-
-      // 4. Token usage collector (OpenCode refresh snapshot)
-      sources.push('tokenUsage')
-      try {
-        const tokenResult = collectTokenUsageSnapshot()
-        tokenUsageFromCollector = tokenResult.errors.length > 0 ? null : {
-          periodStart: tokenResult.periodStart,
-          periodEnd: tokenResult.periodEnd,
-          source: tokenResult.source,
-          toolName: tokenResult.toolName,
-          totalSessions: tokenResult.totalSessions,
-          totalMessages: tokenResult.totalMessages,
-          totalTokens: tokenResult.totalTokens,
-          totalCost: tokenResult.totalCost,
-          modelUsage: tokenResult.modelUsage,
-          rawJson: tokenResult.rawJson,
-          collectedAt: tokenResult.collectedAt,
-        }
-        if (tokenResult.errors.length > 0) {
-          allErrors.push(...tokenResult.errors)
-        }
-      } catch (err) {
-        allErrors.push(`Token usage collector failed: ${err instanceof Error ? err.message : String(err)}`)
-      }
-
-      if (config.github && config.github.length > 0) {
-        const deriveConfig = { staleThresholdDays: runtimeConfig.orchestrator.staleThresholdDays, lookbackDays: runtimeConfig.orchestrator.githubLookbackDays }
         aggregates = deriveAll(issues, pullRequests, workflowRuns, deriveConfig)
-        aggregates.throughput.totalCommits = localGit.reduce((sum, r) => sum + r.recentCommits, 0)
-        if (sessionUsageFromCollector) {
-          aggregates.sessionUsage = sessionUsageFromCollector
-        }
-        if (tokenUsageFromCollector) {
-          aggregates.tokenUsage = tokenUsageFromCollector
-        }
+        aggregates.throughput.totalCommits = localGit.reduce((sum, repo) => sum + repo.recentCommits, 0)
+        aggregates.sessionUsage = sessionUsageFromCollector
+        aggregates.tokenUsage = tokenUsageFromCollector
       }
 
       if (!aggregates) {
-        const now = new Date()
-        aggregates = {
-          throughput: {
-            periodStart: new Date(now.getTime() - runtimeConfig.orchestrator.githubLookbackDays * 24 * 60 * 60 * 1000).toISOString(),
-            periodEnd: capturedAt,
-            issuesClosed: 0,
-            issuesOpened: 0,
-            prsMerged: 0,
-            prsCreated: 0,
-            totalCommits: localGit.reduce((sum, r) => sum + r.recentCommits, 0),
-          },
-          cycleTime: null,
-          ci: null,
-          staleWork: {
-            asOf: capturedAt,
-            staleIssues: 0,
-            stalePRs: 0,
-            staleThresholdDays: runtimeConfig.orchestrator.staleThresholdDays,
-            oldestItemDays: null,
-          },
-          sessionUsage: sessionUsageFromCollector,
-          tokenUsage: tokenUsageFromCollector,
-          computedAt: capturedAt,
-        }
+        aggregates = fallbackAggregates(
+          capturedAt,
+          localGit,
+          sessionUsageFromCollector,
+          tokenUsageFromCollector,
+        )
       }
 
       const partialData = allErrors.length > 0
-      const errorMetrics: ErrorMetric[] = allErrors.map((msg, i) => ({
-        id: `err-${snapshotId}-${i}`,
+      const errorMetrics: ErrorMetric[] = allErrors.map((message, index) => ({
+        id: `err-${snapshotId}-${index}`,
         source: 'orchestrator',
-        level: 'error' as const,
-        message: msg,
+        level: 'error',
+        message,
         timestamp: capturedAt,
         stackTrace: null,
         metadata: {},
@@ -243,14 +327,7 @@ export function createOrchestrator(config: OrchestratorConfig) {
         issues,
         pullRequests,
         workflowRuns,
-        repositories: repositories.reduce<RepositoryIdentity[]>((acc, repo) => {
-          const existing = acc.find(item => item.repoKey === repo.repoKey)
-          if (!existing) {
-            acc.push(repo)
-            return acc
-          }
-          return acc.map(item => item.repoKey === repo.repoKey ? mergeIdentity(item, repo) : item)
-        }, []),
+        repositories: dedupeRepositories(repositories),
         sessions,
         localGit,
         errors: errorMetrics,

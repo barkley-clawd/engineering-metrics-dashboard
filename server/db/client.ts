@@ -20,8 +20,10 @@ function getDbDir(): string {
   if (process.env['DB_DIR']) return process.env['DB_DIR']
   const cwd = process.cwd()
   const lastSegment = cwd.split(/[\\/]/).filter(Boolean).pop() ?? ''
-  const baseDir = lastSegment === 'frontend' ? join(cwd, '..') : cwd
-  return join(baseDir, '.data')
+  if (lastSegment === 'frontend') {
+    return join(/* turbopackIgnore: true */ process.cwd(), '..', '.data')
+  }
+  return join(/* turbopackIgnore: true */ process.cwd(), '.data')
 }
 
 export function getDbPath(): string {
@@ -99,8 +101,10 @@ function buildSourceHealth(
 function openDatabase(): Db {
   const dbDir = getDbDir()
   const dbPath = getDbPath()
-  if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true })
-  const db = new Database(dbPath)
+  if (!existsSync(/* turbopackIgnore: true */ dbDir)) {
+    mkdirSync(/* turbopackIgnore: true */ dbDir, { recursive: true })
+  }
+  const db = new Database(/* turbopackIgnore: true */ dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')
@@ -228,7 +232,49 @@ export function getRefreshInProgress(): boolean {
   const db = getDb()
   const row = db.prepare(SQL.getLatestState).get({ key: 'refresh_in_progress' }) as { value?: unknown } | undefined
   const result = row ? String(row.value) : 'false'
-  return result === 'true'
+  if (result !== 'true') return false
+
+  const refreshStateRow = db.prepare(SQL.getLatestState).get({ key: REFRESH_STATE_KEY }) as { value?: string } | undefined
+  const refreshState = parseRefreshState(refreshStateRow?.value ?? null)
+  if (refreshState.status === 'running' && refreshState.lastRunFinishedAt == null) return true
+
+  setRefreshInProgress(false)
+  return false
+}
+
+export interface RefreshLockResetResult {
+  wasLocked: boolean
+  previousStatus: RefreshRunStatus
+  resetAt: string
+}
+
+export function resetRefreshLock(reason = 'Refresh lock reset manually'): RefreshLockResetResult {
+  const db = getDb()
+  const row = db.prepare(SQL.getLatestState).get({ key: 'refresh_in_progress' }) as { value?: unknown } | undefined
+  const wasLocked = row ? String(row.value) === 'true' : false
+  const previous = getRefreshRunState()
+  const resetAt = new Date().toISOString()
+
+  setRefreshInProgress(false)
+
+  if (previous.status === 'running') {
+    saveRefreshState({
+      ...previous,
+      status: 'skipped',
+      lastRunFinishedAt: previous.lastRunFinishedAt ?? resetAt,
+      lastError: reason,
+      durationMs: previous.lastRunStartedAt
+        ? Math.max(0, Date.parse(resetAt) - Date.parse(previous.lastRunStartedAt))
+        : previous.durationMs,
+      nextRunAt: null,
+    })
+  }
+
+  return {
+    wasLocked,
+    previousStatus: previous.status,
+    resetAt,
+  }
 }
 
 export function getLatestState(): LatestState {
@@ -252,7 +298,6 @@ export function getLatestState(): LatestState {
 
   return {
     snapshot,
-    selectedRepoKey: 'all',
     lastRefreshAt: lastRefresh,
     lastSuccessfulRefreshAt: lastRefresh,
     refreshInProgress,
