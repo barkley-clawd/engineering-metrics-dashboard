@@ -33,6 +33,18 @@ export async function triggerRefresh(): Promise<TriggerRefreshResult> {
   return (await res.json()) as TriggerRefreshResult;
 }
 
+export interface ResetRefreshLockResult {
+  wasLocked: boolean;
+  previousStatus: string;
+  resetAt: string;
+}
+
+export async function resetRefreshLock(): Promise<ResetRefreshLockResult> {
+  const res = await fetch(`${API_BASE}/api/refresh/reset-lock`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed reset refresh lock: ${res.statusText}`);
+  return (await res.json()) as ResetRefreshLockResult;
+}
+
 export async function fetchDiagnostics(): Promise<SourceDiagnostics> {
   const res = await fetch(`${API_BASE}/api/diagnostics`, {
     cache: "no-store",

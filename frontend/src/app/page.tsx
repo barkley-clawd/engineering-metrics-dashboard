@@ -417,12 +417,10 @@ export default function Home() {
     return result.slice(0, 20);
   }, [attentionItems, conditionFilter, sortMode, typeFilter]);
 
-  const isFiltered = typeFilter !== "all" || conditionFilter !== "all" || sortMode !== "urgent";
-
   const attentionState = useSectionState({
     isLoading: !hasEverLoaded && isLoading,
     error,
-    isEmpty: filteredItems.length === 0 && !isFiltered,
+    isEmpty: filteredItems.length === 0,
   });
 
   const tokenUsage = useMemo(() => data?.usage.tokenUsage ?? null, [data]);
@@ -962,9 +960,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {!isFiltered ? null : (
-                <p className="text-base text-text-muted">Filters are active.</p>
-              )}
             </div>
 
             <SectionState
@@ -975,12 +970,7 @@ export default function Home() {
               minHeight="200px"
             >
               <div className="space-y-2">
-                {filteredItems.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-divider px-4 py-6 text-base text-text-muted">
-                    No items match this filter. Try broadening your filter.
-                  </p>
-                ) : (
-                  filteredItems.map((item) => (
+                {filteredItems.map((item) => (
                     <div
                       key={item.id}
                       className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
@@ -1000,8 +990,7 @@ export default function Home() {
                         </Badge>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
               </div>
             </SectionState>
           </CardContent>

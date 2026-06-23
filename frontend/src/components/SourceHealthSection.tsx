@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Activity } from "lucide-react";
+import { ChevronDown, Activity, LockOpen, Loader2 } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SectionState, useSectionState } from "@/components/section-state";
 import type { SourceDiagnostics } from "@/types";
 
@@ -74,6 +75,7 @@ export function SourceHealthSection() {
   const diagnosticsLoading = useDashboardStore((state) => state.diagnosticsLoading);
   const diagnosticsError = useDashboardStore((state) => state.diagnosticsError);
   const diagnosticsHasLoaded = useDashboardStore((state) => state.diagnosticsHasLoaded);
+  const resetRefreshLock = useDashboardStore((state) => state.resetRefreshLock);
 
   const diagnostics = dashboardDiagnostics ?? dataDiagnostics;
   const [expanded, setExpanded] = useState(loadExpanded);
@@ -114,21 +116,40 @@ export function SourceHealthSection() {
             </CardTitle>
             <CardDescription>Collector status and discovered repositories</CardDescription>
           </div>
-          <button
-            type="button"
-            onClick={toggle}
-            className="inline-flex items-center justify-center rounded-md border border-card-border p-1.5 text-text-secondary transition-colors hover:bg-card-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-expanded={expanded}
-            aria-controls="source-health-panel"
-          >
-            <ChevronDown
-              className={cn(
-                "size-4 transition-transform duration-200",
-                expanded && "rotate-180",
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void resetRefreshLock()}
+              disabled={diagnosticsLoading}
+              className="border border-status-warning/30 bg-status-warning/5 text-status-warning hover:bg-status-warning/10 hover:text-status-warning"
+              aria-label="Reset refresh lock"
+              title="Reset refresh lock"
+            >
+              {diagnosticsLoading ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <LockOpen className="size-3.5" aria-hidden="true" />
               )}
-              aria-hidden="true"
-            />
-          </button>
+              Reset lock
+            </Button>
+            <button
+              type="button"
+              onClick={toggle}
+              className="inline-flex items-center justify-center rounded-md border border-card-border p-1.5 text-text-secondary transition-colors hover:bg-card-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-expanded={expanded}
+              aria-controls="source-health-panel"
+            >
+              <ChevronDown
+                className={cn(
+                  "size-4 transition-transform duration-200",
+                  expanded && "rotate-180",
+                )}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Source health summary">

@@ -4,6 +4,8 @@ This repository is worked on by AI coding agents through OpenCode/OpenCLaw.
 
 Before making changes, read the relevant project docs and skill files.
 
+Ensure to keep the `README.md` and `.env.example` up to date.
+
 ## Required reading
 
 For any task:

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { fetchDiagnostics, fetchState, triggerRefresh } from "@/lib/api-client";
+import { fetchDiagnostics, fetchState, resetRefreshLock, triggerRefresh } from "@/lib/api-client";
 import type { DashboardStateResponse, SourceDiagnostics } from "@/types";
 
 export type RefreshStatus = "idle" | "running" | "success" | "failed";
@@ -25,6 +25,7 @@ export interface DashboardState {
   triggerAutoRefresh: () => Promise<void>;
   clearManualRefreshError: () => void;
   loadDiagnostics: () => Promise<void>;
+  resetRefreshLock: () => Promise<void>;
 }
 
 type FetchKind = "manual" | "polled";
@@ -211,6 +212,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         diagnosticsHasLoaded: true,
         diagnosticsError: null,
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({
+        diagnosticsLoading: false,
+        diagnosticsHasLoaded: true,
+        diagnosticsError: message,
+      });
+    }
+  },
+
+  resetRefreshLock: async () => {
+    set({ diagnosticsLoading: true, diagnosticsError: null });
+    try {
+      await resetRefreshLock();
+      const [data, diagnostics] = await Promise.all([fetchState(), fetchDiagnostics()]);
+      set((s) => ({
+        ...applyFetchedState(s, data, "polled"),
+        diagnostics,
+        diagnosticsLoading: false,
+        diagnosticsHasLoaded: true,
+        diagnosticsError: null,
+        refreshStatus: "idle",
+        manualRefreshStatus: "idle",
+        manualRefreshErrorTimestamp: null,
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({

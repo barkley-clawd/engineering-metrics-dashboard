@@ -1,5 +1,5 @@
 import { GET } from "./route";
-import { getDailyMetricsRange, getLatestState, initDb } from "../../../../../server/db/client";
+import { getDailyMetricsRange, getLatestState } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import type { DashboardWindow, LatestState } from "@/types";
 

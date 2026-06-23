@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-import { initDb } from "../../../../../server/db/client";
 import { startRefreshInBackground } from "../../../../../server/lib/refresh/run-refresh";
+import { ensureDb } from "../_lib/ensure-db";
 
 export const maxDuration = 10;
-
-let dbInitialized = false;
-
-async function ensureDb(): Promise<void> {
-  if (!dbInitialized) {
-    await initDb();
-    dbInitialized = true;
-  }
-}
 
 export async function POST() {
   try {

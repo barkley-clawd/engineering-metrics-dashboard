@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { initDb, getLatestState, getDailyMetricsRange } from "../../../../../server/db/client";
+import { getLatestState, getDailyMetricsRange } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
 import { getDashboardWindowDays } from "../../../../../server/lib/runtime-config";
+import { ensureDb } from "../_lib/ensure-db";
 import type { DashboardAttentionItem, DashboardStateResponse, IssueMetric, PullRequestMetric } from "@/types";
 
 const STALE_THRESHOLD_DAYS_FALLBACK = 14;
@@ -68,15 +69,6 @@ function buildAttentionItems(
   }
 
   return items;
-}
-
-let dbInitialized = false;
-
-async function ensureDb(): Promise<void> {
-  if (!dbInitialized) {
-    await initDb();
-    dbInitialized = true;
-  }
 }
 
 export async function GET() {
