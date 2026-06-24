@@ -20,4 +20,3 @@ export interface TokenUsageRow {
   collectedAt: string
 }
 
-

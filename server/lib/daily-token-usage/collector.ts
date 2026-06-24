@@ -1,68 +1,55 @@
 import { execFileSync } from 'node:child_process'
-import os from 'node:os'
-import path from 'node:path'
-import { upsertDailyTokenUsage, initDb } from '../../db/client'
+import { findOpencodeBinary } from '../opencode/binary'
 import { parseTokenUsage } from '../opencode/collector'
-import type { DailyTokenUsageInsert } from '../../../types/daily-token-usage'
+import { upsertDailyTokenUsage, getLatestDailyTokenUsage } from '../../db/client'
+import type { DailyTokenUsageRow } from '../../../types/daily-token-usage'
 
 export interface DailyTokenUsageCollectorResult {
   success: boolean
   date: string
-  row: DailyTokenUsageInsert | null
+  row: DailyTokenUsageRow | null
   errors: string[]
 }
 
-function isCommandNotFound(err: unknown): boolean {
-  if (err instanceof Error) {
-    const e = err as NodeJS.ErrnoException
-    if (e.code === 'ENOENT' || e.code === 'EACCES') return true
-    const msg = e.message
-    if (msg.includes('ENOENT') || msg.includes('EACCES') || msg.includes('not found') || msg.includes('127')) return true
-  }
-  return false
-}
+export async function maybeCollectDailyTokenUsage(): Promise<DailyTokenUsageCollectorResult> {
+  const errors: string[] = []
 
-function findOpendencodeBinary(): string | null {
-  const candidates: string[] = []
-  if (process.env.OPENCODE_BIN) candidates.push(process.env.OPENCODE_BIN)
-  candidates.push('opencode')
-  candidates.push(path.join(os.homedir(), '.opencode/bin/opencode'))
-  candidates.push('/home/openclaw/.opencode/bin/opencode')
-  if (process.env.OPENCODE_COMMAND) candidates.push(process.env.OPENCODE_COMMAND)
-  for (const cmd of candidates) {
-    try {
-      execFileSync(cmd, ['--version'], { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
-      return cmd
-    } catch {
-      continue
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const date = yesterday.toISOString().slice(0, 10)
+
+  try {
+    const existing = getLatestDailyTokenUsage()
+    if (existing && existing.date === date) {
+      return { success: true, date, row: null, errors: [] }
     }
+  } catch (err) {
+    errors.push(`DB check failed: ${err instanceof Error ? err.message : String(err)}`)
   }
-  return null
+
+  return collectAndStoreDailyTokenUsage(date)
 }
 
 export async function collectAndStoreDailyTokenUsage(targetDate?: string): Promise<DailyTokenUsageCollectorResult> {
   const errors: string[] = []
 
-  let date: string
-  if (targetDate) {
-    date = targetDate
-  } else {
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    date = yesterday.toISOString().slice(0, 10)
-  }
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const date = targetDate ?? yesterday.toISOString().slice(0, 10)
 
-  const binary = findOpendencodeBinary()
+  const binary = findOpencodeBinary()
   if (!binary) {
     errors.push('OpenCode binary not found')
     return { success: false, date, row: null, errors }
   }
 
   try {
-    const stdout = execFileSync(binary, ['stats', '--days', '1', '--models'], { timeout: 15000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] })
+    const stdout = execFileSync(binary, ['stats', '--days', '1', '--models'], {
+      timeout: 15000,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    })
     const parsed = parseTokenUsage(stdout)
 
-    const row: DailyTokenUsageInsert = {
+    const row: DailyTokenUsageRow = {
       date,
       totalSessions: parsed.totalSessions,
       totalMessages: parsed.totalMessages,
@@ -70,14 +57,22 @@ export async function collectAndStoreDailyTokenUsage(targetDate?: string): Promi
       totalCost: parsed.totalCost,
       modelUsage: parsed.modelUsage,
       rawJson: parsed.rawJson,
+      createdAt: new Date().toISOString(),
     }
 
-    await initDb()
-    upsertDailyTokenUsage(row)
+    upsertDailyTokenUsage({
+      date,
+      totalSessions: row.totalSessions,
+      totalMessages: row.totalMessages,
+      totalTokens: row.totalTokens,
+      totalCost: row.totalCost,
+      modelUsage: row.modelUsage,
+      rawJson: row.rawJson,
+    })
 
     return { success: true, date, row, errors: [] }
   } catch (err) {
-    errors.push(`Daily token usage collector failed: ${err instanceof Error ? err.message : String(err)}`)
+    errors.push(`Daily token usage collection failed: ${err instanceof Error ? err.message : String(err)}`)
     return { success: false, date, row: null, errors }
   }
 }

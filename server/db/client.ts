@@ -9,7 +9,7 @@ import type { MetricSnapshot, LatestState, RefreshRunRecord, RefreshRunState, Re
 import type { AggregateType, DashboardAggregates, ThroughputAggregate, CycleTimeAggregate, CIAggregate, StaleWorkAggregate, SessionUsageAggregate, TokenUsageAggregate } from '../../types/aggregates'
 import type { DailyMetricsInsert, DailyMetricsRow } from '../../types/daily-metrics'
 import type { TokenUsageRow } from '../../types/opencode'
-import type { DailyTokenUsageInsert, DailyTokenUsageRow } from '../../types/daily-token-usage'
+import type { DailyTokenUsageRow, DailyTokenUsageInsert } from '../../types/daily-token-usage'
 import type { IssueMetric, PullRequestMetric, WorkflowRunMetric, RepositoryIdentity, SessionMetric, LocalGitRepoMetric } from '../../types/metrics'
 import { computeDailyMetrics } from '../lib/daily-metrics'
 
@@ -439,7 +439,20 @@ export function getLatestDailyDayForRepo(repoKey: string): string | null {
   return row ? String(row.day) : null
 }
 
-// ── Daily token usage write / read helpers ────────────────────────
+// ── Daily token usage helpers ──────────────────────────────────────
+
+function rowToDailyTokenUsageRow(row: Record<string, unknown>): DailyTokenUsageRow {
+  return {
+    date: String(row.date),
+    totalSessions: Number(row.total_sessions),
+    totalMessages: Number(row.total_messages),
+    totalTokens: Number(row.total_tokens),
+    totalCost: row.total_cost != null ? Number(row.total_cost) : null,
+    modelUsage: JSON.parse(String(row.model_usage)),
+    rawJson: row.raw_json != null ? String(row.raw_json) : null,
+    createdAt: String(row.created_at),
+  }
+}
 
 export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
   const db = getDb()
@@ -454,24 +467,16 @@ export function upsertDailyTokenUsage(row: DailyTokenUsageInsert): void {
   })
 }
 
-function rowToDailyTokenUsage(row: Record<string, unknown>): DailyTokenUsageRow {
-  return {
-    date: String(row.date),
-    totalSessions: Number(row.total_sessions),
-    totalMessages: Number(row.total_messages),
-    totalTokens: Number(row.total_tokens),
-    totalCost: row.total_cost != null ? Number(row.total_cost) : null,
-    modelUsage: JSON.parse(String(row.model_usage)) as DailyTokenUsageRow['modelUsage'],
-    rawJson: row.raw_json != null ? String(row.raw_json) : null,
-    createdAt: String(row.created_at),
-  }
+export function getDailyTokenUsageRange(fromDate: string, toDate: string): DailyTokenUsageRow[] {
+  const db = getDb()
+  const rows = db.prepare(SQL.getDailyTokenUsageRange).all({ fromDate, toDate }) as Record<string, unknown>[]
+  return rows.map(rowToDailyTokenUsageRow)
 }
 
-export function getDailyTokenUsageRange(fromDate: string | null, toDate: string | null): DailyTokenUsageRow[] {
+export function getLatestDailyTokenUsage(): DailyTokenUsageRow | null {
   const db = getDb()
-  const stmt = db.prepare(SQL.getDailyTokenUsageRange)
-  const rows = stmt.all({ fromDate, toDate }) as Record<string, unknown>[]
-  return rows.map(rowToDailyTokenUsage)
+  const row = db.prepare(SQL.getLatestDailyTokenUsage).get() as Record<string, unknown> | undefined
+  return row ? rowToDailyTokenUsageRow(row) : null
 }
 
 // ── Normalized source data write helpers ──────────────────────────
@@ -938,6 +943,7 @@ export interface RetentionResult {
   snapshotsDeleted: number
   aggregatesDeleted: number
   dailyMetricsDeleted: number
+  dailyTokenUsageDeleted: number
   sessionsDeleted: number
   workflowRunsDeleted: number
 }
@@ -952,6 +958,7 @@ export function runRetention(env: NodeJS.ProcessEnv = process.env): RetentionRes
   const snapshotsBefore = daysAgoIso(retention.snapshotsDays)
   const aggregatesBefore = daysAgoIso(retention.snapshotsDays)
   const dailyMetricsBeforeDay = daysAgoDay(retention.dailyMetricsDays)
+  const dailyTokenUsageBeforeDate = daysAgoDay(retention.dailyTokenUsageDays)
   const sessionsBefore = daysAgoIso(retention.sessionsDays)
   const workflowRunsBefore = daysAgoIso(retention.workflowRunsDays)
 
@@ -980,6 +987,7 @@ export function runRetention(env: NodeJS.ProcessEnv = process.env): RetentionRes
     }
 
     const dailyResult = db.prepare(SQL.deleteDailyMetricsOlderThan).run({ beforeDay: dailyMetricsBeforeDay })
+    const dailyTokenUsageResult = db.prepare(SQL.deleteDailyTokenUsageOlderThan).run({ beforeDate: dailyTokenUsageBeforeDate })
     const sessionsResult = db.prepare(SQL.deleteSessionsOlderThan).run({ before: sessionsBefore })
     const workflowRunsResult = db.prepare(SQL.deleteWorkflowRunsOlderThan).run({ before: workflowRunsBefore })
 
@@ -987,6 +995,7 @@ export function runRetention(env: NodeJS.ProcessEnv = process.env): RetentionRes
       snapshotsDeleted,
       aggregatesDeleted,
       dailyMetricsDeleted: dailyResult.changes,
+      dailyTokenUsageDeleted: dailyTokenUsageResult.changes,
       sessionsDeleted: sessionsResult.changes,
       workflowRunsDeleted: workflowRunsResult.changes,
     }
