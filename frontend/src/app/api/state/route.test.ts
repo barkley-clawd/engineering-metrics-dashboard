@@ -245,7 +245,7 @@ describe("GET /api/state", () => {
         staleThresholdDays: 14,
         items: [
           {
-            id: "issue-issue-1",
+            id: "issue-github:demo/repo-issue-1",
             kind: "issue",
             title: "Investigate stale issue",
             repo: "demo/repo",

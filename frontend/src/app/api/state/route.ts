@@ -26,7 +26,7 @@ function buildAttentionItems(
     const ageDays = daysSince(issue.updatedAt, nowMs);
     const isStale = ageDays >= staleThresholdDays;
     items.push({
-      id: `issue-${issue.id}`,
+      id: `issue-${issue.repoKey}-${issue.id}`,
       kind: "issue",
       title: issue.title,
       repo: issue.repo,
@@ -58,7 +58,7 @@ function buildAttentionItems(
     }
 
     items.push({
-      id: `pr-${pr.id}`,
+      id: `pr-${pr.repoKey}-${pr.id}`,
       kind: "pr",
       title: pr.title,
       repo: pr.repo,
