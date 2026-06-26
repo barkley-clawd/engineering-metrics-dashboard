@@ -198,6 +198,7 @@ export interface DashboardAttentionItem {
   kind: 'issue' | 'pr'
   title: string
   repo: string
+  url: string
   ageDays: number
   priorityTier: 'stale' | 'ci-failing' | 'ci-blocked' | 'ci-pending'
   statusLabel: string
