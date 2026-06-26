@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { useDashboardStore } from "@/store/dashboard";
 import { HealthSignalCard } from "@/components/HealthSignalCard";
 import { Button } from "@/components/ui/button";
@@ -979,7 +979,16 @@ export default function Home() {
                 {filteredItems.map((item) => (
                     <div
                       key={item.id}
-                      className="flex flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
+                      className="group flex cursor-pointer flex-col gap-2 rounded-lg border border-card-border bg-card-bg px-4 py-3 transition-colors hover:bg-card-hover md:flex-row md:items-center md:justify-between"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => window.open(item.url, "_blank", "noopener,noreferrer")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          window.open(item.url, "_blank", "noopener,noreferrer");
+                        }
+                      }}
                       aria-label={`${item.kind === "issue" ? "Issue" : "Pull request"}: ${item.title}, ${item.ageDays} days old, status: ${item.statusLabel}`}
                     >
                       <div className="min-w-0 space-y-1">
@@ -994,6 +1003,7 @@ export default function Home() {
                         <Badge variant="outline" className="border-divider text-text-muted">
                           {item.statusLabel}
                         </Badge>
+                        <ExternalLink className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                       </div>
                     </div>
                   ))}
