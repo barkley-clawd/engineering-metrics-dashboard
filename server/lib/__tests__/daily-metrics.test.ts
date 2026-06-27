@@ -234,25 +234,25 @@ describe('computeDailyMetrics', () => {
     const day1 = allRow(rows, '2026-06-01')!
     // Window [2026-05-18, 2026-06-01] -> PR1(10d), PR2(10d), PR3(12d) = 3 PRs
     expect(day1.cycleTimeSampleSize).toBe(3)
-    expect(day1.avgCycleTimeDays).toBeCloseTo(10.667, 3)
-    expect(day1.medianCycleTimeDays).toBe(10)
-    expect(day1.p95CycleTimeDays).toBeCloseTo(11.8, 3)
+    expect(day1.avgCycleTimeSeconds).toBeCloseTo(((10 + 10 + 12) / 3) * 86400, 0)
+    expect(day1.medianCycleTimeSeconds).toBe(10 * 86400)
+    expect(day1.p95CycleTimeSeconds).toBeCloseTo(11.8 * 86400, 0)
 
     const day5 = allRow(rows, '2026-06-05')!
     // Window [2026-05-22, 2026-06-05] -> PR2(10d), PR3(12d), PR4(11d) = 3 PRs
     expect(day5.cycleTimeSampleSize).toBe(3)
-    expect(day5.avgCycleTimeDays).toBe(11)
-    expect(day5.medianCycleTimeDays).toBe(11)
+    expect(day5.avgCycleTimeSeconds).toBe(11 * 86400)
+    expect(day5.medianCycleTimeSeconds).toBe(11 * 86400)
     // p95: sorted[10,11,12]; index=0.95*2=1.9 => 11+(12-11)*0.9=11.9
-    expect(day5.p95CycleTimeDays).toBeCloseTo(11.9, 3)
+    expect(day5.p95CycleTimeSeconds).toBeCloseTo(11.9 * 86400, 3)
 
     const day10 = allRow(rows, '2026-06-10')!
     // Window [2026-05-27, 2026-06-10] -> PR3(12d), PR4(11d), PR5(7d) = 3 PRs
     expect(day10.cycleTimeSampleSize).toBe(3)
-    expect(day10.avgCycleTimeDays).toBe(10)
-    expect(day10.medianCycleTimeDays).toBe(11)
+    expect(day10.avgCycleTimeSeconds).toBe(10 * 86400)
+    expect(day10.medianCycleTimeSeconds).toBe(11 * 86400)
     // p95: sorted[7,11,12]; index=0.95*2=1.9 => 11+(12-11)*0.9=11.9
-    expect(day10.p95CycleTimeDays).toBeCloseTo(11.9, 3)
+    expect(day10.p95CycleTimeSeconds).toBeCloseTo(11.9 * 86400, 3)
   })
 
   it('returns null cycle time when fewer than 3 merged PRs in trailing window', () => {
@@ -266,9 +266,9 @@ describe('computeDailyMetrics', () => {
     const rows = computeDailyMetrics(snapshot)
     for (const row of rows) {
       expect(row.cycleTimeSampleSize).toBe(0)
-      expect(row.avgCycleTimeDays).toBeNull()
-      expect(row.medianCycleTimeDays).toBeNull()
-      expect(row.p95CycleTimeDays).toBeNull()
+      expect(row.avgCycleTimeSeconds).toBeNull()
+      expect(row.medianCycleTimeSeconds).toBeNull()
+      expect(row.p95CycleTimeSeconds).toBeNull()
     }
   })
 

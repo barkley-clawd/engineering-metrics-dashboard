@@ -58,9 +58,9 @@ function makeLatestState(): LatestState {
         cycleTime: {
           periodStart: "2026-05-27",
           periodEnd: "2026-06-23",
-          averageDays: 0,
-          medianDays: 0,
-          p95Days: 0,
+          averageSeconds: 0,
+          medianSeconds: 0,
+          p95Seconds: 0,
           sampleSize: 0,
         },
         ci: {
@@ -160,9 +160,9 @@ function makeDashboardWindow(): DashboardWindow {
         message: null,
       },
       cycleTime: {
-        averageDays: null,
-        medianDays: null,
-        p95Days: null,
+        averageSeconds: null,
+        medianSeconds: null,
+        p95Seconds: null,
         sampleSize: 0,
         sourceDay: null,
         status: "empty",

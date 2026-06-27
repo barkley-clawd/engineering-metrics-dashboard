@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 export const SQL = {
 
@@ -186,9 +186,9 @@ export const SQL = {
       prs_created           INTEGER NOT NULL DEFAULT 0,
       prs_merged            INTEGER NOT NULL DEFAULT 0,
       total_commits         INTEGER NOT NULL DEFAULT 0,
-      avg_cycle_time_days   REAL,
-      median_cycle_time_days REAL,
-      p95_cycle_time_days   REAL,
+      avg_cycle_time_seconds   REAL,
+      median_cycle_time_seconds REAL,
+      p95_cycle_time_seconds   REAL,
       cycle_time_sample_size INTEGER NOT NULL DEFAULT 0,
       ci_total_runs         INTEGER NOT NULL DEFAULT 0,
       ci_pass_count         INTEGER NOT NULL DEFAULT 0,
@@ -313,7 +313,7 @@ export const SQL = {
     INSERT INTO daily_metrics (
       day, repo_key, captured_at, source, version, reflects_complete_data,
       issues_opened, issues_closed, prs_created, prs_merged, total_commits,
-      avg_cycle_time_days, median_cycle_time_days, p95_cycle_time_days, cycle_time_sample_size,
+      avg_cycle_time_seconds, median_cycle_time_seconds, p95_cycle_time_seconds, cycle_time_sample_size,
       ci_total_runs, ci_pass_count, ci_fail_count, ci_pass_rate, ci_avg_duration_ms,
       total_sessions, session_error_count,
       stale_issues, stale_prs,
@@ -321,7 +321,7 @@ export const SQL = {
     ) VALUES (
       @day, @repoKey, @capturedAt, @source, @version, @reflectsCompleteData,
       @issuesOpened, @issuesClosed, @prsCreated, @prsMerged, @totalCommits,
-      @avgCycleTimeDays, @medianCycleTimeDays, @p95CycleTimeDays, @cycleTimeSampleSize,
+      @avgCycleTimeSeconds, @medianCycleTimeSeconds, @p95CycleTimeSeconds, @cycleTimeSampleSize,
       @ciTotalRuns, @ciPassCount, @ciFailCount, @ciPassRate, @ciAvgDurationMs,
       @totalSessions, @sessionErrorCount,
       @staleIssues, @stalePrs,
@@ -337,9 +337,9 @@ export const SQL = {
       prs_created = excluded.prs_created,
       prs_merged = excluded.prs_merged,
       total_commits = excluded.total_commits,
-      avg_cycle_time_days = excluded.avg_cycle_time_days,
-      median_cycle_time_days = excluded.median_cycle_time_days,
-      p95_cycle_time_days = excluded.p95_cycle_time_days,
+      avg_cycle_time_seconds = excluded.avg_cycle_time_seconds,
+      median_cycle_time_seconds = excluded.median_cycle_time_seconds,
+      p95_cycle_time_seconds = excluded.p95_cycle_time_seconds,
       cycle_time_sample_size = excluded.cycle_time_sample_size,
       ci_total_runs = excluded.ci_total_runs,
       ci_pass_count = excluded.ci_pass_count,

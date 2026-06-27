@@ -113,9 +113,9 @@ describe('deriveCycleTime', () => {
     const result = deriveCycleTime(prs, ps, pe)
     expect(result).not.toBeNull()
     expect(result!.sampleSize).toBe(3)
-    expect(result!.averageDays).toBeCloseTo(5.33, 1)
-    expect(result!.medianDays).toBe(4)
-    expect(result!.p95Days).toBe(10)
+    expect(result!.averageSeconds).toBeCloseTo(((2 + 4 + 10) / 3) * 86400, 0)
+    expect(result!.medianSeconds).toBe(4 * 86400)
+    expect(result!.p95Seconds).toBe(10 * 86400)
   })
 
   it('returns null when no PRs merged in period', () => {
@@ -144,7 +144,7 @@ describe('deriveStaleWork', () => {
     const result = deriveStaleWork(issues, prs, 14, now)
     expect(result.staleIssues).toBe(1) // issue 1 (updated Jan 1, >14 days old)
     expect(result.stalePRs).toBe(1)
-    expect(result.oldestItemDays).toBeCloseTo(31, 0)
+    expect(result.oldestItemDays).toBeCloseTo(31 * 86400, 0)
   })
 
   it('handles empty data', () => {

@@ -11,9 +11,9 @@ export interface ThroughputAggregate {
 export interface CycleTimeAggregate {
   periodStart: string
   periodEnd: string
-  averageDays: number
-  medianDays: number
-  p95Days: number
+  averageSeconds: number
+  medianSeconds: number
+  p95Seconds: number
   sampleSize: number
 }
 

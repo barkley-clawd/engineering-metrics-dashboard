@@ -63,14 +63,14 @@ function throughputStatus(status: string | undefined): "healthy" | "warning" | "
   return "critical";
 }
 
-function cycleTimeStatus(card: { medianDays: number | null; averageDays: number | null; status: string } | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
+function cycleTimeStatus(card: { medianSeconds: number | null; averageSeconds: number | null; status: string } | undefined): "healthy" | "warning" | "critical" | "empty" | "unknown" {
   if (!card) return "unknown";
   if (card.status === "unavailable" || card.status === "error" || card.status === "unconfigured") return "critical";
   if (card.status === "empty") return "empty";
-  const days = card.medianDays ?? card.averageDays;
-  if (days == null) return "empty";
-  if (days <= 3) return "healthy";
-  if (days <= 7) return "warning";
+  const seconds = card.medianSeconds ?? card.averageSeconds;
+  if (seconds == null) return "empty";
+  if (seconds <= 3 * 86400) return "healthy";
+  if (seconds <= 7 * 86400) return "warning";
   return "critical";
 }
 
@@ -192,15 +192,15 @@ function buildThroughputOption(days: DashboardWindowDay[]): EChartsOption | null
 }
 
 function buildCycleTimeOption(days: DashboardWindowDay[]): EChartsOption | null {
-  // Backend #152 will provide rolling 14-day medianCycleTimeDays per day.
-  // Until then we use the per-day medianCycleTimeDays from DailyMetricsRow.
+  // Backend #152 will provide rolling 14-day medianCycleTimeSeconds per day.
+  // Until then we use the per-day medianCycleTimeSeconds from DailyMetricsRow.
   const nonNull = days.filter(
-    (d) => !d.isGap && d.metrics?.medianCycleTimeDays != null,
+    (d) => !d.isGap && d.metrics?.medianCycleTimeSeconds != null,
   );
   if (nonNull.length === 0) return null;
   const labels = days.map((d) => formatDayLabel(d.day));
   const values = days.map((d) =>
-    d.isGap ? null : (d.metrics?.medianCycleTimeDays ?? null),
+    d.isGap ? null : (d.metrics?.medianCycleTimeSeconds ?? null),
   );
   return {
     grid: { top: 8, right: 8, bottom: 20, left: 36, containLabel: false },
@@ -306,21 +306,22 @@ function computeThroughputFooter(days: DashboardWindowDay[]): string {
 
 function computeCycleTimeFooter(days: DashboardWindowDay[]): string {
   const nonNull = days.filter(
-    (d) => !d.isGap && d.metrics?.medianCycleTimeDays != null,
+    (d) => !d.isGap && d.metrics?.medianCycleTimeSeconds != null,
   );
   if (nonNull.length < 3) return "Insufficient PR data for cycle time trend";
-  const latest = nonNull[nonNull.length - 1].metrics!.medianCycleTimeDays!;
+  const latestSeconds = nonNull[nonNull.length - 1].metrics!.medianCycleTimeSeconds!;
+  const latestDays = latestSeconds / 86400;
   // Trend: compare first half vs second half. Down = improving for cycle time.
   const mid = Math.floor(nonNull.length / 2);
   const firstHalf = nonNull.slice(0, mid);
   const secondHalf = nonNull.slice(mid);
   const firstAvg =
-    firstHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeDays ?? 0), 0) / firstHalf.length;
+    firstHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeSeconds ?? 0), 0) / firstHalf.length;
   const secondAvg =
-    secondHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeDays ?? 0), 0) / secondHalf.length;
+    secondHalf.reduce((s, d) => s + (d.metrics?.medianCycleTimeSeconds ?? 0), 0) / secondHalf.length;
   const trend =
     secondAvg < firstAvg ? "Improving" : secondAvg > firstAvg ? "Slowing" : "Steady";
-  return `Daily median \u00B7 ${latest.toFixed(1)}d latest \u00B7 ${trend} over window`;
+  return `Daily median \u00B7 ${latestDays.toFixed(1)}d latest \u00B7 ${trend} over window`;
 }
 
 function computeCIFooter(days: DashboardWindowDay[]): string {
@@ -586,10 +587,10 @@ export default function Home() {
           <HealthSignalCard
             label="Cycle Time"
             value={
-              cards?.cycleTime.medianDays != null
-                ? cards.cycleTime.medianDays.toFixed(1)
-                : cards?.cycleTime.averageDays != null
-                  ? cards.cycleTime.averageDays.toFixed(1)
+              cards?.cycleTime.medianSeconds != null
+                ? (cards.cycleTime.medianSeconds / 86400).toFixed(1)
+                : cards?.cycleTime.averageSeconds != null
+                  ? (cards.cycleTime.averageSeconds / 86400).toFixed(1)
                   : null
             }
             unit="d"
@@ -597,8 +598,8 @@ export default function Home() {
             status={cycleTimeStatus(cards?.cycleTime)}
             detail={
               cards
-                ? cards.cycleTime.p95Days != null
-                  ? `P95: ${cards.cycleTime.p95Days.toFixed(1)}d · ${cards.cycleTime.sampleSize} items`
+                ? cards.cycleTime.p95Seconds != null
+                  ? `P95: ${(cards.cycleTime.p95Seconds / 86400).toFixed(1)}d · ${cards.cycleTime.sampleSize} items`
                   : `${cards.cycleTime.sampleSize} items`
                 : null
             }

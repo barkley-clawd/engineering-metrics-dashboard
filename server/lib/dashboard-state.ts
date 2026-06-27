@@ -79,7 +79,7 @@ function lastRowWithCycleTime(rows: DailyMetricsRow[]): DailyMetricsRow | null {
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i]
     if (!row) continue
-    if (row.avgCycleTimeDays != null || row.medianCycleTimeDays != null || row.p95CycleTimeDays != null || row.cycleTimeSampleSize > 0) {
+    if (row.avgCycleTimeSeconds != null || row.medianCycleTimeSeconds != null || row.p95CycleTimeSeconds != null || row.cycleTimeSampleSize > 0) {
       return row
     }
   }
@@ -226,9 +226,9 @@ function buildCycleTimeSummary(rows: DailyMetricsRow[]): DashboardWindowCycleTim
   }
 
   return {
-    averageDays: latest?.avgCycleTimeDays ?? null,
-    medianDays: latest?.medianCycleTimeDays ?? null,
-    p95Days: latest?.p95CycleTimeDays ?? null,
+    averageSeconds: latest?.avgCycleTimeSeconds ?? null,
+    medianSeconds: latest?.medianCycleTimeSeconds ?? null,
+    p95Seconds: latest?.p95CycleTimeSeconds ?? null,
     sampleSize: latest?.cycleTimeSampleSize ?? 0,
     sourceDay: latest?.day ?? null,
     status,
