@@ -155,7 +155,7 @@ describe('normalized read helpers', () => {
       id: 'snap-agg',
       aggregates: {
         throughput: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-18T12:00:00Z', issuesClosed: 5, issuesOpened: 10, prsMerged: 3, prsCreated: 7, totalCommits: 20 },
-        cycleTime: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-18T12:00:00Z', averageDays: 2.5, medianDays: 2, p95Days: 5, sampleSize: 3 },
+          cycleTime: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-18T12:00:00Z', averageSeconds: 2.5 * 86400, medianSeconds: 2 * 86400, p95Seconds: 5 * 86400, sampleSize: 3 },
         ci: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-18T12:00:00Z', totalRuns: 10, passCount: 8, failCount: 2, passRate: 0.8, averageDurationMs: 1200 },
         staleWork: { asOf: '2026-06-18T12:00:00Z', staleIssues: 2, stalePRs: 1, staleThresholdDays: 14, oldestItemDays: 30 },
         sessionUsage: {
@@ -177,7 +177,7 @@ describe('normalized read helpers', () => {
     expect(reconstructed!.aggregates.throughput.issuesClosed).toBe(5)
     expect(reconstructed!.aggregates.throughput.totalCommits).toBe(20)
     expect(reconstructed!.aggregates.cycleTime).not.toBeNull()
-    expect(reconstructed!.aggregates.cycleTime!.averageDays).toBe(2.5)
+    expect(reconstructed!.aggregates.cycleTime!.averageSeconds).toBe(2.5 * 86400)
     expect(reconstructed!.aggregates.ci).not.toBeNull()
     expect(reconstructed!.aggregates.ci!.passRate).toBe(0.8)
     expect(reconstructed!.aggregates.staleWork.staleIssues).toBe(2)

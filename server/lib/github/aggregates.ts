@@ -14,7 +14,7 @@ function isInPeriod(dateStr: string | null, periodStart: string, periodEnd: stri
 
 function daysBetween(a: string, b: string): number {
   const ms = new Date(b).getTime() - new Date(a).getTime()
-  return Math.max(0, ms / (1000 * 60 * 60 * 24))
+  return Math.max(0, ms / 1000)
 }
 
 export function deriveThroughput(
@@ -68,17 +68,17 @@ export function deriveCycleTime(
 
   if (mergedPrs.length === 0) return null
 
-  const cycleDays = mergedPrs.map(pr => daysBetween(pr.createdAt, pr.mergedAt!)).sort((a, b) => a - b)
+  const cycleSeconds = mergedPrs.map(pr => daysBetween(pr.createdAt, pr.mergedAt!)).sort((a, b) => a - b)
 
-  const n = cycleDays.length
-  const averageDays = cycleDays.reduce((s, d) => s + d, 0) / n
-  const medianDays = n % 2 === 0
-    ? (cycleDays[n / 2 - 1]! + cycleDays[n / 2]!) / 2
-    : cycleDays[Math.floor(n / 2)]!
+  const n = cycleSeconds.length
+  const averageSeconds = cycleSeconds.reduce((s, d) => s + d, 0) / n
+  const medianSeconds = n % 2 === 0
+    ? (cycleSeconds[n / 2 - 1]! + cycleSeconds[n / 2]!) / 2
+    : cycleSeconds[Math.floor(n / 2)]!
   const p95Index = Math.ceil(n * 0.95) - 1
-  const p95Days = cycleDays[Math.min(p95Index, n - 1)]!
+  const p95Seconds = cycleSeconds[Math.min(p95Index, n - 1)]!
 
-  return { periodStart, periodEnd, averageDays, medianDays, p95Days, sampleSize: n }
+  return { periodStart, periodEnd, averageSeconds, medianSeconds, p95Seconds, sampleSize: n }
 }
 
 export function deriveStaleWork(
@@ -129,7 +129,7 @@ export function deriveCI(
   const durations: number[] = []
   for (const run of runs) {
     if (run.completedAt) {
-      const d = daysBetween(run.createdAt, run.completedAt) * 24 * 60 * 60 * 1000
+      const d = daysBetween(run.createdAt, run.completedAt) * 1000
       durations.push(d)
     }
   }

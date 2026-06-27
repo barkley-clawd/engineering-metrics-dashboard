@@ -795,7 +795,7 @@ describe('createOrchestrator', () => {
         errors: [],
         aggregates: {
           throughput: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T00:00:00Z', issuesClosed: 1, issuesOpened: 3, prsMerged: 1, prsCreated: 3, totalCommits: 0 },
-          cycleTime: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T00:00:00Z', averageDays: 2, medianDays: 1.5, p95Days: 4, sampleSize: 5 },
+          cycleTime: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T00:00:00Z', averageSeconds: 2 * 86400, medianSeconds: 1.5 * 86400, p95Seconds: 4 * 86400, sampleSize: 5 },
           ci: { periodStart: '2026-06-01T00:00:00Z', periodEnd: '2026-06-05T00:00:00Z', totalRuns: 2, passCount: 1, failCount: 1, passRate: 0.5, averageDurationMs: 3600000 },
           staleWork: { asOf: 'now', staleIssues: 2, stalePRs: 1, staleThresholdDays: 14, oldestItemDays: null },
           sessionUsage: null,

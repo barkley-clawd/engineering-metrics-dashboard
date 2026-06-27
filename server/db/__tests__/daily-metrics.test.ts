@@ -20,9 +20,9 @@ function makeRow(day: string, overrides: Partial<DailyMetricsInsert> = {}): Dail
     prsCreated: 0,
     prsMerged: 0,
     totalCommits: 0,
-    avgCycleTimeDays: null,
-    medianCycleTimeDays: null,
-    p95CycleTimeDays: null,
+    avgCycleTimeSeconds: null,
+    medianCycleTimeSeconds: null,
+    p95CycleTimeSeconds: null,
     cycleTimeSampleSize: 0,
     ciTotalRuns: 0,
     ciPassCount: 0,
@@ -170,18 +170,18 @@ describe('daily_metrics table', () => {
   it('stores and retrieves nullable numeric fields correctly', async () => {
     await initDb()
     upsertDailyMetrics(makeRow('2026-06-01', {
-      avgCycleTimeDays: 3.5,
-      medianCycleTimeDays: 2.1,
-      p95CycleTimeDays: 8.9,
+      avgCycleTimeSeconds: 3.5 * 86400,
+      medianCycleTimeSeconds: 2.1 * 86400,
+      p95CycleTimeSeconds: 8.9 * 86400,
       cycleTimeSampleSize: 10,
       ciPassRate: 0.85,
       ciAvgDurationMs: 1200,
     }))
 
     const results = getDailyMetricsRange('2026-06-01', '2026-06-01')
-    expect(results[0]!.avgCycleTimeDays).toBe(3.5)
-    expect(results[0]!.medianCycleTimeDays).toBe(2.1)
-    expect(results[0]!.p95CycleTimeDays).toBe(8.9)
+    expect(results[0]!.avgCycleTimeSeconds).toBe(3.5 * 86400)
+    expect(results[0]!.medianCycleTimeSeconds).toBe(2.1 * 86400)
+    expect(results[0]!.p95CycleTimeSeconds).toBe(8.9 * 86400)
     expect(results[0]!.cycleTimeSampleSize).toBe(10)
     expect(results[0]!.ciPassRate).toBe(0.85)
     expect(results[0]!.ciAvgDurationMs).toBe(1200)
@@ -240,9 +240,9 @@ describe('daily_metrics table', () => {
         prs_created INTEGER NOT NULL DEFAULT 0,
         prs_merged INTEGER NOT NULL DEFAULT 0,
         total_commits INTEGER NOT NULL DEFAULT 0,
-        avg_cycle_time_days REAL,
-        median_cycle_time_days REAL,
-        p95_cycle_time_days REAL,
+        avg_cycle_time_seconds REAL,
+        median_cycle_time_seconds REAL,
+        p95_cycle_time_seconds REAL,
         cycle_time_sample_size INTEGER NOT NULL DEFAULT 0,
         ci_total_runs INTEGER NOT NULL DEFAULT 0,
         ci_pass_count INTEGER NOT NULL DEFAULT 0,

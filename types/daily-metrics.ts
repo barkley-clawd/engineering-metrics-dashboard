@@ -12,9 +12,9 @@ export interface DailyMetricsRow {
   prsCreated: number
   prsMerged: number
   totalCommits: number
-  avgCycleTimeDays: number | null
-  medianCycleTimeDays: number | null
-  p95CycleTimeDays: number | null
+  avgCycleTimeSeconds: number | null
+  medianCycleTimeSeconds: number | null
+  p95CycleTimeSeconds: number | null
   cycleTimeSampleSize: number
   ciTotalRuns: number
   ciPassCount: number
@@ -40,9 +40,9 @@ export interface DailyMetricsInsert {
   prsCreated: number
   prsMerged: number
   totalCommits: number
-  avgCycleTimeDays: number | null
-  medianCycleTimeDays: number | null
-  p95CycleTimeDays: number | null
+  avgCycleTimeSeconds: number | null
+  medianCycleTimeSeconds: number | null
+  p95CycleTimeSeconds: number | null
   cycleTimeSampleSize: number
   ciTotalRuns: number
   ciPassCount: number

@@ -48,9 +48,9 @@ export interface DashboardWindowThroughputSummary {
 }
 
 export interface DashboardWindowCycleTimeSummary {
-  averageDays: number | null
-  medianDays: number | null
-  p95Days: number | null
+  averageSeconds: number | null
+  medianSeconds: number | null
+  p95Seconds: number | null
   sampleSize: number
   sourceDay: string | null
   status: DashboardPanelStatus
