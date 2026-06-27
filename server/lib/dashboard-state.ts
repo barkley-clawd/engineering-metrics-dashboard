@@ -67,9 +67,7 @@ function hasLocalGitConfig(): boolean {
 
 function hasSessionConfig(): boolean {
   return Boolean(
-    getEnv(process.env, 'SECRET_HOUSE_SESSIONS_PERIOD_DAYS', 'SESSIONS_PERIOD_DAYS')
-    || getEnv(process.env, 'SECRET_HOUSE_OPENCODE_BIN', 'OPENCODE_BIN')
-    || getEnv(process.env, 'SECRET_HOUSE_OPENCODE_COMMAND', 'OPENCODE_COMMAND'),
+    getEnv(process.env, 'SECRET_HOUSE_SESSIONS_PERIOD_DAYS', 'SESSIONS_PERIOD_DAYS'),
   )
 }
 
@@ -127,13 +125,13 @@ function buildSessionUsageSummary(
       topActions: aggregate?.topActions ?? [],
       errorCount: aggregate?.errorCount ?? 0,
       status: 'unconfigured',
-      message: 'Session metrics unavailable - configure OPENCODE_BIN or ensure opencode stats works',
+      message: 'Session metrics unavailable - opencode.db could not be read',
     }
   }
 
   const sessionTotal = aggregate?.totalSessions ?? sumBy(rows, row => row.totalSessions)
   const sessionErrorCount = aggregate?.errorCount ?? sumBy(rows, row => row.sessionErrorCount)
-  const hasSourceError = hasWarning(rows, [/opencode stats CLI unavailable/i, /session collector/i])
+  const hasSourceError = hasWarning(rows, [/opencode.db unavailable/i, /session collector/i])
   const sessionFieldsPresent = aggregate != null
 
   let status: DashboardPanelStatus = 'available'
@@ -141,7 +139,7 @@ function buildSessionUsageSummary(
 
   if (hasSourceError && !sessionFieldsPresent) {
     status = 'unavailable'
-    message = 'Session metrics unavailable - opencode stats could not be collected'
+    message = 'Session metrics unavailable - opencode.db could not be collected'
   } else if (!sessionFieldsPresent) {
     status = 'empty'
     message = 'No session activity'
