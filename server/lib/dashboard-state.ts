@@ -67,9 +67,7 @@ function hasLocalGitConfig(): boolean {
 
 function hasSessionConfig(): boolean {
   return Boolean(
-    getEnv(process.env, 'SECRET_HOUSE_SESSIONS_PERIOD_DAYS', 'SESSIONS_PERIOD_DAYS')
-    || getEnv(process.env, 'SECRET_HOUSE_OPENCODE_BIN', 'OPENCODE_BIN')
-    || getEnv(process.env, 'SECRET_HOUSE_OPENCODE_COMMAND', 'OPENCODE_COMMAND'),
+    getEnv(process.env, 'SECRET_HOUSE_SESSIONS_PERIOD_DAYS', 'SESSIONS_PERIOD_DAYS'),
   )
 }
 
