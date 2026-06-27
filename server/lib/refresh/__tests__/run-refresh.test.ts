@@ -44,8 +44,6 @@ const ENV_KEYS = [
   'GITHUB_REPO',
   'GIT_REPOS',
   'SESSIONS_PERIOD_DAYS',
-  'OPENCODE_BIN',
-  'OPENCODE_COMMAND',
   'SECRET_HOUSE_PROJECT_ROOTS',
   'SECRET_HOUSE_GIT_REPOS',
   'SECRET_HOUSE_GIT_REPO_GLOBS',
@@ -82,8 +80,6 @@ describe('buildRefreshConfig', () => {
     process.env['GITHUB_REPO'] = 'repo'
     process.env['GIT_REPOS'] = ' /tmp/a , /tmp/b '
     process.env['SESSIONS_PERIOD_DAYS'] = '21'
-    process.env['OPENCODE_BIN'] = '/usr/local/bin/opencode'
-    process.env['OPENCODE_COMMAND'] = 'opencode stats'
 
     expect(buildRefreshConfig()).toMatchObject({
       github: [{
@@ -96,8 +92,6 @@ describe('buildRefreshConfig', () => {
       },
       sessions: {
         periodDays: 21,
-        opencodeBin: '/usr/local/bin/opencode',
-        opencodeCommand: 'opencode stats',
       },
     })
   })

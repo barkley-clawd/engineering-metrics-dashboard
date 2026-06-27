@@ -118,8 +118,6 @@ Runtime defaults are centralized in `server/lib/runtime-config.ts`.
 | `SECRET_HOUSE_GIT_REPO_GLOBS` | Comma-separated filters for discovered repo names |
 | `SECRET_HOUSE_GIT_DISCOVERY_MAX_DEPTH` | Discovery depth, default `3`; `0` means no recursion |
 | `SECRET_HOUSE_GIT_EXCLUDE` | Comma-separated directory names to skip |
-| `SECRET_HOUSE_OPENCODE_BIN` | Optional explicit OpenCode binary path |
-| `SECRET_HOUSE_OPENCODE_COMMAND` | Command fallback, usually `opencode` |
 | `SECRET_HOUSE_SESSIONS_PERIOD_DAYS` | Number of days for session metrics |
 | `DB_DIR` | SQLite database directory, default `.data` |
 
@@ -149,7 +147,7 @@ This protects dashboard pages, API routes, and built-in server assets. It does n
 
 Preferred `SECRET_HOUSE_*` names take precedence. Legacy fallback names still supported include:
 
-`GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GIT_REPOS`, `GIT_REPO_ROOTS`, `GIT_REPO_GLOBS`, `GIT_REPO_MAX_DEPTH`, `GIT_REPO_EXCLUDES`, `OPENCODE_BIN`, `OPENCODE_COMMAND`, `SESSIONS_PERIOD_DAYS`, `METRICS_POLLER_ENABLED`, `METRICS_POLL_INTERVAL_SECONDS`, `METRICS_POLL_STARTUP_DELAY_SECONDS`, `METRICS_RUN_ON_STARTUP`.
+`GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GIT_REPOS`, `GIT_REPO_ROOTS`, `GIT_REPO_GLOBS`, `GIT_REPO_MAX_DEPTH`, `GIT_REPO_EXCLUDES`, `SESSIONS_PERIOD_DAYS`, `METRICS_POLLER_ENABLED`, `METRICS_POLL_INTERVAL_SECONDS`, `METRICS_POLL_STARTUP_DELAY_SECONDS`, `METRICS_RUN_ON_STARTUP`.
 
 ## Refresh
 

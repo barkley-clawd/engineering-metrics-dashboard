@@ -138,18 +138,7 @@ export function buildRefreshConfig(env: NodeJS.ProcessEnv = process.env): Orches
   const sessionsConfig: SessionCollectorConfig = {
     periodDays: runtimeConfig.sessions.periodDays,
   }
-  const opencodeBin = getEnv(env, 'SECRET_HOUSE_OPENCODE_BIN', 'OPENCODE_BIN')
-  const opencodeCommand = getEnv(env, 'SECRET_HOUSE_OPENCODE_COMMAND', 'OPENCODE_COMMAND')
-
-  if (opencodeBin) {
-    sessionsConfig.opencodeBin = opencodeBin
-  }
-  if (opencodeCommand) {
-    sessionsConfig.opencodeCommand = opencodeCommand
-  }
-  if (Object.keys(sessionsConfig).length > 0) {
-    config.sessions = sessionsConfig
-  }
+  config.sessions = sessionsConfig
 
   return config
 }
