@@ -979,7 +979,7 @@ export default function Home() {
               onRetry={() => fetch()}
               minHeight="200px"
             >
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[360px] overflow-y-auto">
                 {filteredItems.map((item) => (
                     <div
                       key={item.id}
