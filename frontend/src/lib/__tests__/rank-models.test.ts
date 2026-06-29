@@ -47,9 +47,9 @@ describe("rankModelUsage", () => {
     expect(entries).toEqual(copy);
   });
 
-  it("computes proportion as share of total messages", () => {
-    const a = makeEntry({ modelName: "a", messages: 75 });
-    const b = makeEntry({ modelName: "b", messages: 25 });
+  it("computes proportion as share of total tokens", () => {
+    const a = makeEntry({ modelName: "a", messages: 75, inputTokens: 7500, outputTokens: 0 });
+    const b = makeEntry({ modelName: "b", messages: 25, inputTokens: 2500, outputTokens: 0 });
     const result = rankModelUsage([a, b]);
     expect(result[0].proportion).toBe(0.75);
     expect(result[1].proportion).toBe(0.25);
@@ -87,10 +87,11 @@ describe("rankModelUsage", () => {
     expect(result).toHaveLength(2);
     expect(result[0].modelName).toBe("dominant");
     expect(result[0].isOther).toBe(false);
+    expect(result[0].proportion).toBeCloseTo(9500 / 9900, 10);
     expect(result[1].modelName).toBe("Other (2 models)");
     expect(result[1].isOther).toBe(true);
     expect(result[1].messages).toBe(40);
-    expect(result[1].proportion).toBe(40 / 1000);
+    expect(result[1].proportion).toBeCloseTo(400 / 9900, 10);
     expect(result[1].inputTokens).toBe(400);
     expect(result[1].outputTokens).toBe(0);
     expect(result[1].cost).toBe(0.50);
@@ -125,7 +126,7 @@ describe("rankModelUsage", () => {
     result.forEach((r) => expect(r.isOther).toBe(false));
   });
 
-  it("handles all-zero-message entries with proportion 0", () => {
+  it("handles all-zero-token entries with proportion 0", () => {
     const entries = [
       { modelName: "a", messages: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
       { modelName: "b", messages: 0, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, cost: null },
@@ -148,6 +149,7 @@ describe("rankModelUsage", () => {
     expect(other.inputTokens).toBeNull();
     expect(other.outputTokens).toBeNull();
     expect(other.cost).toBeNull();
+    expect(other.proportion).toBe(0);
   });
 
   it("Other row tokens sum non-null values when mixed", () => {
@@ -161,6 +163,7 @@ describe("rankModelUsage", () => {
     expect(other.inputTokens).toBe(100);
     expect(other.outputTokens).toBe(50);
     expect(other.cost).toBe(0.02);
+    expect(other.proportion).toBeCloseTo(150 / 9800, 10);
   });
 
   it("groups 3+ remainder models into a single Other row", () => {
@@ -175,6 +178,7 @@ describe("rankModelUsage", () => {
     expect(result[1].modelName).toBe("Other (3 models)");
     expect(result[1].isOther).toBe(true);
     expect(result[1].messages).toBe(50);
+    expect(result[1].proportion).toBeCloseTo(300 / 9800, 10);
   });
 
   it("includes single leftover model separately when only one remains after 95% token cutoff", () => {
