@@ -7,6 +7,7 @@ import { rankModelUsage, totalTokens as modelTotalTokens } from "@/lib/rank-mode
 import type { RankedModelEntry } from "@/lib/rank-models";
 import { UsageBar } from "@/components/UsageBar";
 import { cn } from "@/lib/utils";
+import { formatCost } from "@/lib/format-cost";
 import { averageCostPerMessage, hasDetailData, totalTokens as sumEntryTokens } from "./model-usage-utils";
 import type { TokenUsageRow } from "@/types";
 
@@ -15,16 +16,6 @@ function formatNumber(value: number | null | undefined): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return String(value);
-}
-
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 export interface ModelUsageRankListProps {
@@ -123,7 +114,7 @@ function ModelRow({
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-[0.06em] text-text-muted">Cost</span>
-                    <span className={cn("text-xs font-mono tabular-nums", entry.cost != null && entry.cost > 0 ? "text-accent-primary" : "text-text-secondary")}>{formatCurrency(entry.cost)}</span>
+                    <span className={cn("text-xs font-mono tabular-nums", entry.cost != null && entry.cost > 0 ? "text-accent-primary" : "text-text-secondary")}>{formatCost(entry.cost)}</span>
                   </div>
                 </div>
               )}
@@ -144,7 +135,7 @@ function ModelRow({
                   <UsageBar value={entry.cost ?? 0} max={totalCost} size="md" color="bg-chart-2" label={`${entry.modelName}: cost share`} animated={false} />
                 </div>
                 <p className="text-[10px] text-text-muted">
-                  Avg cost / message: {formatCurrency(averageCostPerMessage(entry))}
+                  Avg cost / message: {formatCost(averageCostPerMessage(entry))}
                 </p>
               </div>
             </div>
@@ -239,7 +230,7 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
                 : "text-text-primary",
             )}
           >
-            {formatCurrency(tokenUsage!.totalCost)}
+            {formatCost(tokenUsage!.totalCost)}
           </span>
         </span>
       </div>
