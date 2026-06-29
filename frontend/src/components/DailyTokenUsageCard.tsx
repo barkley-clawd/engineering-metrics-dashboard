@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EChartsOption } from "echarts-for-react";
 import { cn } from "@/lib/utils";
+import { formatCost } from "@/lib/format-cost";
 
 interface DailyTokenUsageCardProps {
   rows: DailyTokenUsageRow[];
@@ -24,11 +25,6 @@ function formatNumber(value: number | null | undefined): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return String(value);
-}
-
-function formatCost(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return "$" + value.toFixed(2);
 }
 
 function formatDayLabel(dayStr: string): string {
@@ -94,7 +90,7 @@ function buildDailyTokenUsageOption(
         axisLabel: {
           fontSize: 10,
           color: "#64748b",
-          formatter: (value: number) => "$" + value.toFixed(2),
+          formatter: (value: number) => formatCost(value),
         },
       },
     ],
@@ -104,6 +100,18 @@ function buildDailyTokenUsageOption(
       borderColor: "#262a33",
       textStyle: { color: "#f1f5f9", fontSize: 12 },
       axisPointer: { type: "cross", label: { backgroundColor: "#262a33" } },
+      formatter: (params: any[]) => {
+        return params
+          .map((p) => {
+            const rawValue = Array.isArray(p.value) ? p.value[1] : p.value;
+            const value =
+              p.seriesName === "Cost"
+                ? formatCost(rawValue)
+                : rawValue ?? "—";
+            return `${p.marker ?? ""} ${p.seriesName}: ${value}`;
+          })
+          .join("<br/>");
+      },
     },
     series: [
       {
