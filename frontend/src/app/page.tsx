@@ -1022,7 +1022,7 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-text-primary">Model Usage</CardTitle>
             <CardDescription>
-              Ranked by cost and token volume
+              Usage breakdown by model
             </CardDescription>
           </CardHeader>
           <CardContent>

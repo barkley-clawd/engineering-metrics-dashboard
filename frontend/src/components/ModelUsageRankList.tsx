@@ -3,7 +3,7 @@
 import { useMemo, useState, useCallback } from "react";
 import { BarChart3, ChevronDown, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { rankModelUsage } from "@/lib/rank-models";
+import { rankModelUsage, totalTokens as modelTotalTokens } from "@/lib/rank-models";
 import type { RankedModelEntry } from "@/lib/rank-models";
 import { UsageBar } from "@/components/UsageBar";
 import { cn } from "@/lib/utils";
@@ -34,23 +34,20 @@ export interface ModelUsageRankListProps {
 function ModelRow({
   entry,
   expanded,
-  maxMessages,
-  totalTokenShare,
+  maxTokens,
+  totalMessages,
   totalCost,
   onToggle,
 }: {
   entry: RankedModelEntry;
   expanded: boolean;
-  maxMessages: number;
-  totalTokenShare: number;
+  maxTokens: number;
+  totalMessages: number;
   totalCost: number;
   onToggle: () => void;
 }) {
-  const entryTokenTotal = sumEntryTokens(entry);
-  const tokenShare =
-    totalTokenShare > 0 && entryTokenTotal != null
-      ? entryTokenTotal / totalTokenShare
-      : 0;
+  const entryTokenTotal = modelTotalTokens(entry);
+  const messageShare = totalMessages > 0 ? entry.messages / totalMessages : 0;
 
   return (
     <div className="rounded-lg border border-card-border bg-card-bg p-3 transition-colors hover:bg-card-hover">
@@ -78,10 +75,10 @@ function ModelRow({
       </button>
 
       <UsageBar
-        value={entry.messages}
-        max={maxMessages}
+        value={entryTokenTotal}
+        max={maxTokens}
         color="bg-accent-primary"
-        label={`${entry.modelName}: ${Math.round(entry.proportion * 100)} percent of messages`}
+        label={`${entry.modelName}: ${Math.round(entry.proportion * 100)} percent of tokens`}
         className="mt-2"
       />
 
@@ -122,7 +119,7 @@ function ModelRow({
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-[0.06em] text-text-muted">Total</span>
-            <span className="text-xs font-mono tabular-nums text-text-secondary">{formatNumber(entryTokenTotal)}</span>
+                    <span className="text-xs font-mono tabular-nums text-text-secondary">{formatNumber(sumEntryTokens(entry))}</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-[0.06em] text-text-muted">Cost</span>
@@ -134,10 +131,10 @@ function ModelRow({
               <div className="space-y-2">
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.06em] text-text-muted">
-                    <span>Token share</span>
-            <span>{Math.round(tokenShare * 100)}%</span>
-          </div>
-          <UsageBar value={entryTokenTotal ?? 0} max={totalTokenShare} size="md" color="bg-chart-1" label={`${entry.modelName}: token share`} animated={false} />
+                    <span>Message share</span>
+                    <span>{Math.round(messageShare * 100)}%</span>
+                  </div>
+                  <UsageBar value={entry.messages} max={totalMessages} size="md" color="bg-chart-1" label={`${entry.modelName}: message share`} animated={false} />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.06em] text-text-muted">
@@ -190,11 +187,11 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
     setExpanded(new Set());
   }, []);
 
-  const maxMessages = useMemo(
-    () => (ranked.length > 0 ? Math.max(...ranked.map((e) => e.messages)) : 0),
+  const maxTokens = useMemo(
+    () => (ranked.length > 0 ? Math.max(...ranked.map((e) => modelTotalTokens(e))) : 0),
     [ranked],
   );
-  const totalTokenShare = useMemo(() => ranked.reduce((sum, e) => sum + (sumEntryTokens(e) ?? 0), 0), [ranked]);
+  const totalMessages = useMemo(() => ranked.reduce((sum, e) => sum + e.messages, 0), [ranked]);
   const totalCost = useMemo(() => ranked.reduce((sum, e) => sum + (e.cost ?? 0), 0), [ranked]);
 
   if (modelUsage.length === 0) {
@@ -265,8 +262,8 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
             key={entry.modelName}
             entry={entry}
             expanded={expanded.has(entry.modelName)}
-            maxMessages={maxMessages}
-            totalTokenShare={totalTokenShare}
+            maxTokens={maxTokens}
+            totalMessages={totalMessages}
             totalCost={totalCost}
             onToggle={() => toggle(entry.modelName)}
           />

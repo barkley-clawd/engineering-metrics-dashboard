@@ -25,28 +25,32 @@ function sumOrNull(values: (number | null)[]): number | null {
   return has ? sum : null;
 }
 
-function totalTokens(entry: ModelUsageEntry): number {
+export function totalTokens(entry: ModelUsageEntry): number {
   return (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0);
 }
 
 /**
  * Ranks model usage entries by total tokens (input + output) descending,
  * applies a 95% cumulative-token-share cutoff, and groups remaining
- * models (2+) into a single "Other" row.  Returns a new sorted array;
- * does not mutate input.
+ * models (2+) into a single "Other" row.  The returned `proportion` is
+ * each row's share of total tokens.  Returns a new sorted array; does not
+ * mutate input.
  */
 export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
   if (entries.length === 0) return [];
 
-  const sorted = [...entries].sort((a, b) => totalTokens(b) - totalTokens(a));
-  const totalMessages = sorted.reduce((sum, e) => sum + e.messages, 0);
+  const sorted = [...entries].sort((a, b) => {
+    const diff = totalTokens(b) - totalTokens(a);
+    if (diff !== 0) return diff;
+    return a.modelName.localeCompare(b.modelName);
+  });
   const totalTokenSum = sorted.reduce((sum, e) => sum + totalTokens(e), 0);
 
   if (totalTokenSum === 0) {
     return sorted.map((e) => ({
       ...e,
       isOther: false,
-      proportion: totalMessages > 0 ? e.messages / totalMessages : 0,
+      proportion: 0,
     }));
   }
 
@@ -64,17 +68,18 @@ export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
   const result: RankedModelEntry[] = top.map((entry) => ({
     ...entry,
     isOther: false,
-    proportion: entry.messages / totalMessages,
+    proportion: totalTokens(entry) / totalTokenSum,
   }));
 
   if (rest.length === 1) {
     result.push({
       ...rest[0],
       isOther: false,
-      proportion: rest[0].messages / totalMessages,
+      proportion: totalTokens(rest[0]) / totalTokenSum,
     });
   } else if (rest.length >= 2) {
     const otherMessages = rest.reduce((sum, e) => sum + e.messages, 0);
+    const otherTokens = rest.reduce((sum, e) => sum + totalTokens(e), 0);
     result.push({
       modelName: `Other (${rest.length} models)`,
       messages: otherMessages,
@@ -84,7 +89,7 @@ export function rankModelUsage(entries: ModelUsageEntry[]): RankedModelEntry[] {
       cacheWriteTokens: sumOrNull(rest.map((e) => e.cacheWriteTokens)),
       cost: sumOrNull(rest.map((e) => e.cost)),
       isOther: true,
-      proportion: otherMessages / totalMessages,
+      proportion: otherTokens / totalTokenSum,
     });
   }
 
