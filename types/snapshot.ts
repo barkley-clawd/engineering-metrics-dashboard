@@ -200,12 +200,13 @@ export interface DashboardAttentionItem {
   repo: string
   url: string
   ageDays: number
-  priorityTier: 'stale' | 'ci-failing' | 'ci-blocked' | 'ci-pending'
+  priorityTier: 'stale' | 'ci-failing' | 'ci-blocked' | 'ci-pending' | 'completed'
   statusLabel: string
 }
 
 export interface DashboardStateAttention {
   staleThresholdDays: number
+  completedWindowDays: number
   items: DashboardAttentionItem[]
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLatestState, getDailyMetricsRange, getDailyTokenUsageRange } from "../../../../../server/db/client";
 import { buildDashboardWindow } from "../../../../../server/lib/dashboard-state";
-import { getDashboardWindowDays, getShowPrivateRepoItems } from "../../../../../server/lib/runtime-config";
+import { getCompletedWindowDays, getDashboardWindowDays, getShowPrivateRepoItems } from "../../../../../server/lib/runtime-config";
 import { ensureDb } from "../_lib/ensure-db";
 import type { DashboardAttentionItem, DashboardStateResponse, IssueMetric, PullRequestMetric, RepositoryIdentity } from "@/types";
 
@@ -30,6 +30,7 @@ function buildAttentionItems(
   pullRequests: PullRequestMetric[],
   nowMs: number,
   staleThresholdDays: number,
+  completedWindowDays: number,
   privateRepoKeys: Set<string>,
 ): DashboardAttentionItem[] {
   const items: DashboardAttentionItem[] = [];
@@ -48,6 +49,26 @@ function buildAttentionItems(
       ageDays,
       priorityTier: isStale ? "stale" : "ci-pending",
       statusLabel: isStale ? "Stale" : "Active",
+    });
+  }
+
+  for (const issue of issues) {
+    if (issue.state !== "closed") continue;
+    if (!issue.closedAt) continue;
+    if (privateRepoKeys.has(issue.repoKey)) continue;
+
+    const daysSinceClosed = daysSince(issue.closedAt, nowMs);
+    if (daysSinceClosed > completedWindowDays) continue;
+
+    items.push({
+      id: `issue-${issue.repoKey}-${issue.id}`,
+      kind: "issue",
+      title: issue.title,
+      repo: issue.repo,
+      url: issue.url,
+      ageDays: daysSinceClosed,
+      priorityTier: "completed",
+      statusLabel: "Closed",
     });
   }
 
@@ -85,6 +106,26 @@ function buildAttentionItems(
     });
   }
 
+  for (const pr of pullRequests) {
+    if (pr.state !== "merged") continue;
+    if (!pr.mergedAt) continue;
+    if (privateRepoKeys.has(pr.repoKey)) continue;
+
+    const daysSinceMerged = daysSince(pr.mergedAt, nowMs);
+    if (daysSinceMerged > completedWindowDays) continue;
+
+    items.push({
+      id: `pr-${pr.repoKey}-${pr.id}`,
+      kind: "pr",
+      title: pr.title,
+      repo: pr.repo,
+      url: pr.url,
+      ageDays: daysSinceMerged,
+      priorityTier: "completed",
+      statusLabel: "Merged",
+    });
+  }
+
   return items;
 }
 
@@ -117,6 +158,8 @@ export async function GET() {
       ? new Set<string>()
       : buildPrivateRepoKeySet(state.snapshot?.repositories ?? []);
 
+    const completedWindowDays = getCompletedWindowDays();
+
     const body: DashboardStateResponse = {
       window: {
         startDay: dashboardWindow.startDay,
@@ -135,11 +178,13 @@ export async function GET() {
       },
       attention: {
         staleThresholdDays,
+        completedWindowDays,
         items: buildAttentionItems(
           state.snapshot?.issues ?? [],
           state.snapshot?.pullRequests ?? [],
           Date.now(),
           staleThresholdDays,
+          completedWindowDays,
           privateRepoKeys,
         ),
       },

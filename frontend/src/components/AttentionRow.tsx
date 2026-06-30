@@ -13,6 +13,7 @@ type PriorityTier =
   | "ci-blocked"
   | "ci-pending"
   | "stale"
+  | "completed"
 
 interface AttentionRowProps {
   kind: "issue" | "pr"
@@ -30,6 +31,7 @@ const dotColor: Record<PriorityTier, string> = {
   "ci-blocked": "bg-status-warning",
   "ci-pending": "bg-status-info",
   stale: "bg-status-stale",
+  completed: "bg-status-success",
 }
 
 const badgeKind: Record<
