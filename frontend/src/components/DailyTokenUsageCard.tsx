@@ -303,7 +303,7 @@ export function DailyTokenUsageCard({
                         <div role="table" className="w-full">
                           <div
                             role="row"
-                            className="grid grid-cols-[2fr_repeat(5,1fr)_auto] gap-x-3 px-3 py-1.5 text-[10px] uppercase tracking-[0.06em] text-text-muted"
+                            className="grid grid-cols-[2fr_repeat(5,1fr)_minmax(100px,1fr)] gap-x-3 px-3 py-1.5 text-[10px] uppercase tracking-[0.06em] text-text-muted"
                           >
                             <div role="columnheader">Model</div>
                             <div role="columnheader" className="text-right">Input</div>
@@ -317,7 +317,7 @@ export function DailyTokenUsageCard({
                             <div
                               key={m.modelName}
                               role="row"
-                              className="grid grid-cols-[2fr_repeat(5,1fr)_auto] gap-x-3 border-t border-card-border px-3 py-2.5"
+                              className="grid grid-cols-[2fr_repeat(5,1fr)_minmax(100px,1fr)] gap-x-3 border-t border-card-border px-3 py-2.5"
                             >
                               <div
                                 role="cell"
