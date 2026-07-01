@@ -267,3 +267,65 @@ Every page needs one unforgettable design choice. For Signal House this is the *
 
 - The animation must respect `prefers-reduced-motion: reduce`.
 - Only play once per page load (not on every refresh).
+
+---
+
+## 10. Clickable Elements
+
+**Rule: every clickable element must show `cursor: pointer` on hover.** Tailwind CSS v4 preflight does not add `cursor: pointer` to `<button>` elements — the browser default is `cursor: default`, which makes interactive controls feel broken. This applies regardless of how the element is implemented.
+
+### Pattern A — shadcn/ui `<Button>` component
+
+The base `Button` component (`frontend/src/components/ui/button.tsx`) already includes `cursor-pointer` in its `buttonVariants` cva base class. Any new variant or size added to `buttonVariants` inherits the cursor for free. Prefer `<Button>` whenever possible so this stays automatic.
+
+### Pattern B — native `<button>` elements
+
+For raw `<button type="button">` elements used outside the `<Button>` component (dismiss controls, expand/collapse toggles, day-pickers, status pills, etc.) add `cursor-pointer` explicitly to the className:
+
+```tsx
+<button
+  type="button"
+  onClick={handleDismiss}
+  className="cursor-pointer rounded px-2 py-1 text-xs ..."
+>
+  Dismiss
+</button>
+```
+
+Native buttons in this codebase that already follow Pattern B include the error/stale banner dismiss buttons in `app/page.tsx`, the source-health chevron toggle, the model-usage expand/collapse button, and the daily-token-usage day selector buttons.
+
+### Pattern C — non-semantic clickable elements (div / span with onClick)
+
+For `<div>` or `<span>` used as buttons, `cursor-pointer` alone is not enough — full a11y parity with `<button>` is required:
+
+1. `cursor-pointer` in the className (signals interactivity to pointer users).
+2. `role="button"` (announces the element to assistive tech).
+3. `tabIndex={0}` (makes it focusable via keyboard).
+4. `onKeyDown` handler for `Enter` and `Space` (provides keyboard activation).
+5. An `aria-label` or visible text (provides an accessible name).
+
+Example — already in use in `AttentionRow.tsx`, `ModelUsageRankList.tsx`, and the page.tsx attention queue:
+
+```tsx
+<div
+  role="button"
+  tabIndex={0}
+  onClick={onToggle}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onToggle();
+    }
+  }}
+  className="cursor-pointer rounded-lg border ..."
+  aria-label="Toggle details"
+>
+  ...
+</div>
+```
+
+### Anti-patterns
+
+- **Do NOT** add `cursor-pointer` to non-interactive cards or display-only containers. It is a strong affordance that promises a click action — using it on a static card misleads users.
+- **Do NOT** rely on the browser default for `<button>`. Always add `cursor-pointer` to raw native buttons (Pattern B) or use the `<Button>` component (Pattern A).
+- **Do NOT** use `<div onClick>` without Pattern C's full a11y treatment. A click handler alone is not an accessible button.

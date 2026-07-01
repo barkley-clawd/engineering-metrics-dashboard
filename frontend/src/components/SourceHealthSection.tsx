@@ -138,7 +138,7 @@ export function SourceHealthSection() {
             <button
               type="button"
               onClick={toggle}
-              className="inline-flex items-center justify-center rounded-md border border-card-border p-1.5 text-text-secondary transition-colors hover:bg-card-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="cursor-pointer inline-flex items-center justify-center rounded-md border border-card-border p-1.5 text-text-secondary transition-colors hover:bg-card-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-expanded={expanded}
               aria-controls="source-health-panel"
             >

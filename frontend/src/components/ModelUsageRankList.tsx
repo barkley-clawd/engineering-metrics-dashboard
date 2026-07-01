@@ -243,7 +243,7 @@ export function ModelUsageRankList({ tokenUsage }: ModelUsageRankListProps) {
         <div className="flex justify-end">
           <button
             type="button"
-            className="rounded px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="cursor-pointer rounded px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={allExpanded ? collapseAll : expandAll}
           >
             {allExpanded ? "Collapse all" : "Expand all"}
