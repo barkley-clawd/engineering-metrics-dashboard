@@ -284,7 +284,7 @@ export function DailyTokenUsageCard({
                         onClick={() => setSelectedDay(day)}
                         aria-pressed={active}
                         className={cn(
-                          "rounded px-2 py-1 text-xs tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "cursor-pointer rounded px-2 py-1 text-xs tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           active
                             ? "bg-accent-primary text-primary-foreground"
                             : "border border-card-border text-text-muted hover:bg-card-hover",

@@ -703,7 +703,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => clearManualRefreshError()}
-                className="text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1.5 py-0.5"
+                className="cursor-pointer text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1.5 py-0.5"
                 style={{ color: "var(--color-text-muted)" }}
               >
                 Dismiss
@@ -731,7 +731,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setStaleBannerDismissed(true)}
-                className="text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1.5 py-0.5"
+                className="cursor-pointer text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded px-1.5 py-0.5"
                 style={{ color: "var(--color-text-muted)" }}
               >
                 Dismiss
